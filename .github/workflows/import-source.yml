@@ -1,0 +1,27 @@
+name: Import source
+
+on:
+  push:
+    paths:
+      - .github/workflows/import-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source archive
+        run: curl -L "https://aka.doubaocdn.com/s/vdHb2jyI9r" -o source.zip
+      - name: Extract into repository
+        run: unzip -q source.zip -d .
+      - name: Commit source
+        run: |
+          git config user.name "Reencode Bot"
+          git config user.email "reencode@users.noreply.github.com"
+          git add -A
+          git commit -m "Import Reencode 1.0.0 source" || echo "nothing to commit"
+          git push
