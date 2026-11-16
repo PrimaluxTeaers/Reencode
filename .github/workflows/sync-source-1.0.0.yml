@@ -1,0 +1,41 @@
+name: Sync 1.0.0 source with release asset
+
+on:
+  push:
+    paths:
+      - .github/workflows/sync-source-1.0.0.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the exact source shipped in the v1.0.0 release
+        run: |
+          curl -fsSL "https://github.com/PrimaluxTeaers/Reencode/releases/download/v1.0.0/source-1.0.0.zip" -o /tmp/source.zip
+          mkdir -p /tmp/src
+          unzip -oq /tmp/source.zip -d /tmp/src
+          test -f /tmp/src/lib/models.dart
+          grep -q "videoBitrateKbps < 1" /tmp/src/lib/models.dart
+
+      - name: Replace the stale source tree
+        run: |
+          cp -r /tmp/src/lib/. lib/
+          cp -r /tmp/src/test/. test/
+          cp /tmp/src/README.md /tmp/src/README.en.md /tmp/src/CHANGES.md /tmp/src/THIRD_PARTY.md /tmp/src/LICENSE .
+          cp /tmp/src/pubspec.yaml /tmp/src/pubspec.lock .
+          cp /tmp/source.zip source.zip
+          rm -rf android/build
+
+      - name: Commit and push
+        run: |
+          git config user.name "Reencode Bot"
+          git config user.email "reencode@users.noreply.github.com"
+          git add -A
+          git commit -m "Sync source tree with the v1.0.0 release asset" || echo "nothing to commit"
+          git push
