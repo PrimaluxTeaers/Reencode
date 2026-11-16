@@ -1,7 +1,10 @@
+import "dart:io";
+
 import "package:material_ui/material_ui.dart";
 import "package:flutter/services.dart";
 
 import "dialogs.dart";
+import "hardware_profile.dart";
 import "l10n.dart";
 import "licenses_page.dart";
 import "output_store.dart";
@@ -20,6 +23,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   OutputTarget? _target;
   bool _busy = false;
+  HardwareProfile? _hardware;
 
   @override
   void initState() {
@@ -27,6 +31,11 @@ class _SettingsPageState extends State<SettingsPage> {
     S.revision.addListener(_onPreferenceChanged);
     AppPreferences.revision.addListener(_onPreferenceChanged);
     _loadTarget();
+    if (Platform.isWindows) {
+      HardwareProbe.read().then((HardwareProfile profile) {
+        if (mounted) setState(() => _hardware = profile);
+      });
+    }
   }
 
   @override
@@ -119,6 +128,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 16),
                 _folderPanel(scheme),
                 const SizedBox(height: 16),
+                if (Platform.isWindows) ...[
+                  _hardwarePanel(scheme),
+                  const SizedBox(height: 16),
+                ],
                 _appearancePanel(scheme),
                 const SizedBox(height: 16),
                 _aboutPanel(scheme),
@@ -172,6 +185,63 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  /// Windows only. The CPU line is informational; the GPU line is the one that
+  /// matters, because Intel and other vendors deliberately get no hardware path.
+  Widget _hardwarePanel(ColorScheme scheme) {
+    final HardwareProfile? hw = _hardware;
+    final TextStyle? noteStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: scheme.onSurfaceVariant);
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelTitle(scheme, Icons.memory_rounded, S.t("Hardware", "硬件")),
+          const SizedBox(height: 10),
+          Text(
+            hw == null
+                ? S.t("Reading hardware information…", "正在读取硬件信息…")
+                : "${hw.cpuName} · ${hw.physicalCores}C/${hw.logicalCores}T · L3 ${hw.l3Mb} MB",
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (hw != null) ...[
+            const SizedBox(height: 6),
+            Text(_gpuNote(hw), style: noteStyle),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _gpuNote(HardwareProfile hw) {
+    switch (hw.gpuVendor) {
+      case "nvidia":
+        return hw.nvencAvailable
+            ? S.t("NVIDIA NVENC is available.", "NVIDIA NVENC 可用。")
+            : S.t(
+                "NVIDIA GPU found, but NVENC did not start. Falling back to CPU.",
+                "检测到 NVIDIA 显卡，但 NVENC 没能启动，改用 CPU。",
+              );
+      case "amd":
+        return hw.amfAvailable
+            ? S.t("AMD AMF is available.", "AMD AMF 可用。")
+            : S.t(
+                "AMD GPU found, but AMF did not start. Falling back to CPU.",
+                "检测到 AMD 显卡，但 AMF 没能启动，改用 CPU。",
+              );
+      case "intel":
+        return S.t(
+          "Intel and Arc graphics are not supported for hardware encoding. Encoding runs on the CPU.",
+          "Intel 核显与 Arc 不提供硬件加速，编码全部走 CPU。",
+        );
+      default:
+        return S.t(
+          "No supported GPU found. Hardware acceleration is off; encoding runs on the CPU.",
+          "没有受支持的显卡，硬件加速关闭，编码走 CPU。",
+        );
+    }
   }
 
   Widget _folderPanel(ColorScheme scheme) {
