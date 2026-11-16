@@ -1,0 +1,28 @@
+name: Add app icons
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  import-icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download icons and install launcher assets
+        run: |
+          mkdir -p assets/icons android/app/src/main/res/mipmap-mdpi android/app/src/main/res/mipmap-hdpi android/app/src/main/res/mipmap-xhdpi android/app/src/main/res/mipmap-xxhdpi android/app/src/main/res/mipmap-xxxhdpi
+          curl -fsSL 'https://aka.doubaocdn.com/s/KdJBeNzGiy' -o assets/icons/reencode-1024.png
+          curl -fsSL 'https://aka.doubaocdn.com/s/UPrOBtshcS' -o assets/icons/timbre-1024.png
+          cp assets/icons/reencode-1024.png assets/icon.png
+          convert assets/icons/reencode-1024.png -resize 48x48 -strip android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert assets/icons/reencode-1024.png -resize 72x72 -strip android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert assets/icons/reencode-1024.png -resize 96x96 -strip android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert assets/icons/reencode-1024.png -resize 144x144 -strip android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert assets/icons/reencode-1024.png -resize 192x192 -strip android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          git config user.name 'Teacers'
+          git config user.email 'dev@teacers.local'
+          git add assets/icon.png assets/icons android/app/src/main/res
+          git diff --cached --quiet || git commit -m 'Add Reencode video app icon'
+          git push
