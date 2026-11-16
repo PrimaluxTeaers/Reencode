@@ -15,9 +15,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Download source archive
-        run: curl -L "https://aka.doubaocdn.com/s/vdHb2jyI9r" -o source.zip
+        run: curl -fsSL "https://aka.doubaocdn.com/s/vdHb2jyI9r" -o source.zip
       - name: Extract into repository
-        run: unzip -q source.zip -d .
+        run: unzip -oq source.zip -d .
       - name: Commit source
         run: |
           git config user.name "Reencode Bot"
