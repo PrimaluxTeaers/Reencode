@@ -1,0 +1,30 @@
+name: reencode
+description: "Reencode — video bitrate, codec and container conversion for Android."
+publish_to: "none"
+version: 1.0.0+1000
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  material_ui: ^1.11.0
+  ffmpeg_kit_flutter_new:
+    path: third_party/ffmpeg_kit_flutter_new
+  file_picker: ^13.3.3
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  share_plus: ^13.3.1
+  shared_preferences: ^2.5.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/licenses/

@@ -42,7 +42,7 @@ Reencode is distributed under **GPL-3.0**, not LGPL.
 It uses the Full GPL build of FFmpegKit Flutter 4.6.8, which bundles x264, x265, xvidcore and vid.stab. Those are GPL codec libraries, so the combined application must be distributed under GPL-3.0. This is deliberate: H.264 and H.265 software encoding remain available when a device has no hardware encoder, or when its hardware encoder is unreliable.
 
 - Full application license: [LICENSE](LICENSE)
-* Third-party components, versions, licenses and links: [THIRD_PARTY.md](THIRD_PARTY.md)
+- Third-party components, versions, licenses and links: [THIRD_PARTY.md](THIRD_PARTY.md)
 - Every release includes a source archive containing the exact code used to build that APK.
 
 ## Privacy
