@@ -55,7 +55,7 @@ jobs:
 
       - name: Build release
         shell: bash
-        run: flutter build windows --release --target-platform windows-x64
+        run: flutter build windows --release
 
       - name: Bundle FFmpeg beside the executable
         shell: pwsh
