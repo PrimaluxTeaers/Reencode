@@ -1,0 +1,30 @@
+name: UI motion test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "test/ui_motion_test.dart"
+      - "lib/page_route.dart"
+      - "lib/dialogs.dart"
+      - ".github/workflows/ui-motion-test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve packages
+        run: flutter pub get
+      - name: Run UI motion test
+        run: flutter test test/ui_motion_test.dart
+      - name: Run full test suite
+        run: flutter test
