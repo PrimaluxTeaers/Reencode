@@ -22,15 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.50.0"
           channel: stable
           cache: true
 
+      - name: Show toolchain
+        shell: bash
+        run: |
+          flutter --version
+          flutter config --enable-windows-desktop
+
       - name: Generate Windows runner
         shell: bash
-        run: flutter create --platforms=windows .
+        run: flutter create --platforms=windows --project-name reencode .
+
+      - name: Resolve packages
+        shell: bash
+        run: flutter pub get
 
       - name: Fetch FFmpeg x64 GPL build
         shell: pwsh
@@ -45,9 +55,7 @@ jobs:
 
       - name: Build release
         shell: bash
-        run: |
-          flutter pub get
-          flutter build windows --release --target-platform windows-x64
+        run: flutter build windows --release --target-platform windows-x64
 
       - name: Bundle FFmpeg beside the executable
         shell: pwsh
@@ -56,10 +64,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$out/ffmpeg" | Out-Null
           Copy-Item "windows/ffmpeg/ffmpeg.exe" "$out/ffmpeg/"
           Copy-Item "windows/ffmpeg/ffprobe.exe" "$out/ffmpeg/"
+          Get-ChildItem $out | Select-Object Name, Length
 
       - name: Package
-        shell: pwsh
-        run: Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Reencode-windows-x64.zip" -Force
+        shell: pwwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Reencode-windows-x64.zip" -Force
+          Get-Item "Reencode-windows-x64.zip" | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
