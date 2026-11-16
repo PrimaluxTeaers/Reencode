@@ -77,7 +77,7 @@ jobs:
           Get-ChildItem $out | Select-Object Name, Length
 
       - name: Package
-        shell: pwwsh
+        shell: pwsh
         run: |
           Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Reencode-windows-x64.zip" -Force
           Get-Item "Reencode-windows-x64.zip" | Select-Object Name, Length
