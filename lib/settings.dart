@@ -289,37 +289,50 @@ class _SettingsPageState extends State<SettingsPage> {
             children: kAccentPalette.map((item) {
               final bool selected =
                   AppPreferences.seed.toARGB32() == item.$1.toARGB32();
-              return GestureDetector(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  AppPreferences.setSeed(item.$1);
-                },
-                child: Column(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 220),
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: item.$1,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: selected
-                              ? scheme.onSurface
-                              : Colors.transparent,
-                          width: 3,
+              final String label = S.t(item.$2, item.$3);
+              return Semantics(
+                button: true,
+                selected: selected,
+                label: label,
+                child: Tooltip(
+                  message: label,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      AppPreferences.setSeed(item.$1);
+                    },
+                    child: Column(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: item.$1,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selected
+                                  ? scheme.onSurface
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
+                          ),
+                          child: selected
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  color: Colors.white,
+                                )
+                              : null,
                         ),
-                      ),
-                      child: selected
-                          ? const Icon(Icons.check_rounded, color: Colors.white)
-                          : null,
+                        const SizedBox(height: 6),
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      S.t(item.$2, item.$3),
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                  ],
+                  ),
                 ),
               );
             }).toList(),

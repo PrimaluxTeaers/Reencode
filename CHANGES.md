@@ -8,7 +8,7 @@
 
 - 三种模式：只换容器、换编码、压码率。可以单独改一项，也可以同时改编码和容器。
 - 容器 MP4 / MKV / MOV / WebM，视频编码 H.264 / H.265 / VP9 / MPEG-4，音频 AAC / Opus / MP3 / 原样复制。
-- 目标码率、分辨率、帧率、音频码率可调。只换容器走流复制，不重新编码。
+- 目标码率、分辨率、帧率、音频码率可调。视频码率最低 1 kbps，64 kbps 以下会提示实验性低码率档；音频最低 8 kbps。只换容器走流复制，不重新编码。
 - 多文件队列、探测、预检、进度、取消、失败重试。
 - Android SAF 持久输出目录。授权后结果直接写入，结果卡只保留“已完成”；未授权时保留分享。
 - 中文 / English 运行时切换，主题和主题色可调。
@@ -23,7 +23,7 @@ First release.
 
 - Three modes: remux, re-encode, compress. Use one at a time, or combine a codec change with a container change.
 - Containers: MP4 / MKV / MOV / WebM. Video: H.264 / H.265 / VP9 / MPEG-4. Audio: AAC / Opus / MP3 / stream copy.
-- Adjustable target bitrate, resolution, frame rate and audio bitrate. Remux copies streams without re-encoding.
+- Adjustable target bitrate, resolution, frame rate and audio bitrate. Video bitrate goes down to 1 kbps, with a warning below 64 kbps; audio down to 8 kbps. Remux copies streams without re-encoding.
 - Multi-file queue, probing, preflight checks, progress, cancellation and retry after failure.
 - Persistent Android SAF output folder. Once granted, results are written there and the card shows only “Done”; without a folder, sharing stays available.
 - Chinese / English runtime switch, theme and accent colour.

@@ -11,7 +11,6 @@ import "package:share_plus/share_plus.dart";
 import "dialogs.dart";
 import "engine.dart";
 import "l10n.dart";
-import "licenses_page.dart";
 import "models.dart";
 import "output_store.dart";
 import "page_route.dart";
@@ -307,7 +306,6 @@ class _HomePageState extends State<HomePage> {
               job.publishedName = published.name;
               job.publishedUri = published.uri;
               job.finishedAt = DateTime.now();
-              job.removeWhenDone = true;
             });
             continue;
           }
@@ -831,74 +829,91 @@ class _HomePageState extends State<HomePage> {
           ],
           if (job.status == JobStatus.completed) ...[
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh,
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
                 borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    job.hasOutputFolder
-                        ? Icons.folder_rounded
-                        : Icons.insert_drive_file_outlined,
-                    size: 18,
-                    color: scheme.primary,
+                onTap: job.hasOutputFolder
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        _removeJob(job);
+                      }
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          job.hasOutputFolder
-                              ? job.publishedName!
-                              : p.basename(job.outputPath ?? ""),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelLarge,
+                  child: Row(
+                    children: [
+                      Icon(
+                        job.hasOutputFolder
+                            ? Icons.folder_rounded
+                            : Icons.insert_drive_file_outlined,
+                        size: 18,
+                        color: scheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              job.hasOutputFolder
+                                  ? job.publishedName!
+                                  : p.basename(job.outputPath ?? ""),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            if (job.error != null) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                job.error!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.labelSmall
+                                    ?.copyWith(color: scheme.error),
+                              ),
+                            ],
+                          ],
                         ),
-                        if (job.error != null) ...[
-                          const SizedBox(height: 3),
-                          Text(
-                            job.error!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(color: scheme.error),
+                      ),
+                      if (job.hasOutputFolder)
+                        FilledButton.tonalIcon(
+                          onPressed: () {
+                            HapticFeedback.selectionClick();
+                            _removeJob(job);
+                          },
+                          icon: const Icon(Icons.check_rounded, size: 18),
+                          label: Text(S.t("Done", "已完成")),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
                           ),
-                        ],
-                      ],
-                    ),
+                        )
+                      else if (job.outputPath != null)
+                        FilledButton.tonalIcon(
+                          onPressed: () => _share(job),
+                          icon: const Icon(Icons.ios_share_rounded, size: 18),
+                          label: Text(S.t("Share", "分享")),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            tapTargetSize: MaterialTapTargetSize.padded,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  if (job.hasOutputFolder)
-                    FilledButton.tonalIcon(
-                      onPressed: () => _removeJob(job),
-                      icon: const Icon(Icons.check_rounded, size: 18),
-                      label: Text(S.t("Done", "已完成")),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    )
-                  else if (job.outputPath != null)
-                    FilledButton.tonalIcon(
-                      onPressed: () => _share(job),
-                      icon: const Icon(Icons.ios_share_rounded, size: 18),
-                      label: Text(S.t("Share", "分享")),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 40),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
-                ],
+                ),
               ),
             ),
           ],
@@ -1374,15 +1389,24 @@ class _RecipeCardState extends State<RecipeCard> {
           ],
         ),
         const SizedBox(height: 8),
+        Text(
+          S.t(
+            "1–100000 kbps. Values under 64 kbps are allowed; they are an experimental low-bitrate mode.",
+            "1–100000 kbps。低于 64 kbps 也能压，属于实验性低码率档。",
+          ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: <int>[1000, 2000, 4000, 8000].map((int value) {
+          children: <int>[10, 50, 100, 250, 500, 1000, 2000, 4000].map((
+            int value,
+          ) {
             return ActionChip(
               onPressed: widget.enabled ? () => _setVideoBitrate(value) : null,
-              label: Text(
-                value >= 1000 ? "${value ~/ 1000} Mbps" : "$value kbps",
-              ),
+              label: Text("$value kbps"),
             );
           }).toList(),
         ),
@@ -1461,6 +1485,12 @@ class _RecipeCardState extends State<RecipeCard> {
                   if (parsed != null) _setAudioBitrate(parsed);
                 },
               ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              S.t("8–512 kbps", "8–512 kbps"),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ],
         ],

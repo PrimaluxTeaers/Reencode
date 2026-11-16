@@ -9,7 +9,7 @@ Reencode actually transcodes with FFmpeg 8.1.2. It is not a demo shell. Remuxing
 - Containers: MP4, MKV, MOV, WebM.
 - Video codecs: H.264, H.265 / HEVC, VP9, MPEG-4.
 - Audio codecs: AAC, Opus, MP3, stream copy.
-- Target video bitrate, resolution (source / 2160 / 1440 / 1080 / 720 / 480), frame rate (source / 60 / 30 / 24), audio bitrate.
+- Target video bitrate, resolution (source / 2160 / 1440 / 1080 / 720 / 480), frame rate (source / 60 / 30 / 24), audio bitrate. Video bitrate goes down to 1 kbps; below 64 kbps is flagged as the experimental low-bitrate range. Audio goes down to 8 kbps.
 - Multi-file import, per-file probing, a sequential queue, live progress and cancellation.
 - 10-bit sources keep a 10-bit pixel format in H.265 / VP9 outputs. HDR metadata is not preserved.
 - Preflight checks block incompatible container / codec pairs, out-of-range bitrates and source audio that cannot be copied into the target container.

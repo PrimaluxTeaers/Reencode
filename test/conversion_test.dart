@@ -102,6 +102,17 @@ void main() {
     expect(issues.any((RecipeIssue issue) => issue.blocking), isTrue);
   });
 
+  test("low kbps compression is allowed with a non-blocking warning", () {
+    final MediaSummary media = sample();
+    final List<RecipeIssue> issues = const ConversionRecipe(
+      mode: WorkMode.compress,
+      videoBitrateKbps: 16,
+      audioBitrateKbps: 32,
+    ).validate(media);
+    expect(issues.where((RecipeIssue issue) => issue.blocking), isEmpty);
+    expect(issues.any((RecipeIssue issue) => !issue.blocking), isTrue);
+  });
+
   test("output name keeps the source stem and target extension", () {
     final VideoJob job = VideoJob(
       path: "/tmp/clip one.mkv",

@@ -479,22 +479,32 @@ class ConversionRecipe {
         );
       }
     }
-    if (videoBitrateKbps < 64 || videoBitrateKbps > 100000) {
+    if (videoBitrateKbps < 1 || videoBitrateKbps > 100000) {
       issues.add(
         RecipeIssue(
           S.t(
-            "Video bitrate must be between 64 and 100000 kbps.",
-            "视频码率要在 64 到 100000 kbps 之间。",
+            "Video bitrate must be between 1 and 100000 kbps.",
+            "视频码率要在 1 到 100000 kbps 之间。",
           ),
         ),
       );
-    }
-    if (media.hasAudio && (audioBitrateKbps < 24 || audioBitrateKbps > 512)) {
+    } else if (videoBitrateKbps < 64) {
       issues.add(
         RecipeIssue(
           S.t(
-            "Audio bitrate must be between 24 and 512 kbps.",
-            "音频码率要在 24 到 512 kbps 之间。",
+            "Below 64 kbps is experimental: the encoder may drop detail or fail on some sources.",
+            "低于 64 kbps 属于实验档：编码器可能大量丢细节，个别源会直接失败。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (media.hasAudio && (audioBitrateKbps < 8 || audioBitrateKbps > 512)) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "Audio bitrate must be between 8 and 512 kbps.",
+            "音频码率要在 8 到 512 kbps 之间。",
           ),
         ),
       );
@@ -611,7 +621,6 @@ class VideoJob {
   String? publishedName;
   String? publishedUri;
   DateTime? finishedAt;
-  bool removeWhenDone;
 
   VideoJob({
     required this.path,
@@ -624,7 +633,6 @@ class VideoJob {
     this.publishedName,
     this.publishedUri,
     this.finishedAt,
-    this.removeWhenDone = false,
   });
 
   bool get isDone => status == JobStatus.completed;
