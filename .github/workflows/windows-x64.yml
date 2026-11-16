@@ -16,6 +16,9 @@ on:
       - "assets/icons/**"
       - ".github/workflows/windows-x64.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -74,7 +77,7 @@ jobs:
           Get-ChildItem $out | Select-Object Name, Length
 
       - name: Package
-        shell: pwsh
+        shell: pwwsh
         run: |
           Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Reencode-windows-x64.zip" -Force
           Get-Item "Reencode-windows-x64.zip" | Select-Object Name, Length
@@ -84,3 +87,18 @@ jobs:
           name: Reencode-windows-x64
           path: Reencode-windows-x64.zip
           retention-days: 30
+
+      - name: Publish Windows release
+        if: github.ref == 'refs/heads/windows-port'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-v1.0.0
+          name: Reencode Windows 1.0.0
+          body: |
+            Windows x64 build for Reencode 1.0.0.
+
+            This package is the full Windows runner directory with ffmpeg.exe and ffprobe.exe bundled under `ffmpeg/`. It targets Windows 10/11 x64 only; Win7/8/8.1 are not included. Source and the Android APK are in the v1.0.0 release and the repository.
+          files: Reencode-windows-x64.zip
+          fail_on_unmatched_files: true
+          prerelease: false
+          make_latest: false
