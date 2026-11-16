@@ -113,6 +113,101 @@ void main() {
     expect(issues.any((RecipeIssue issue) => !issue.blocking), isTrue);
   });
 
+  test("H.265 keeps 10-bit and offers 12-bit with yuv420p12le", () {
+    final MediaSummary media = sample(videoCodec: "hevc");
+    final StreamSummary tenBit = StreamSummary(
+      codec: "hevc",
+      width: 1920,
+      height: 1080,
+      pixelFormat: "yuv420p10le",
+      fps: 30,
+      bitrateKbps: 9000,
+    );
+    final MediaSummary tenBitMedia = MediaSummary(
+      path: media.path,
+      name: media.name,
+      format: media.format,
+      durationSeconds: media.durationSeconds,
+      sizeBytes: media.sizeBytes,
+      bitrateKbps: media.bitrateKbps,
+      video: tenBit,
+      audio: media.audio,
+    );
+    final List<String> automatic = CommandBuilder.build(
+      media: tenBitMedia,
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        videoBitrateKbps: 8000,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(automatic, containsAllInOrder(<String>["-pix_fmt", "yuv420p10le"]));
+
+    final List<String> twelve = CommandBuilder.build(
+      media: tenBitMedia,
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        videoBitrateKbps: 8000,
+        pixelDepth: PixelDepth.twelve,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(twelve, containsAllInOrder(<String>["-pix_fmt", "yuv420p12le"]));
+  });
+
+  test("CFR mode writes vsync cfr and the target rate", () {
+    final List<String> args = CommandBuilder.build(
+      media: sample(),
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        frameRateMode: FrameRateMode.cfr,
+        targetFps: 144,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(args, containsAllInOrder(<String>["-vsync", "cfr"]));
+    expect(args, containsAllInOrder(<String>["-r", "144"]));
+  });
+
+  test("100 Mbps bitrate is valid and reaches the command", () {
+    final MediaSummary media = sample();
+    final List<RecipeIssue> issues = const ConversionRecipe(
+      videoCodec: VideoCodec.h265,
+      videoBitrateKbps: 100000,
+    ).validate(media);
+    expect(issues.where((RecipeIssue issue) => issue.blocking), isEmpty);
+    final List<String> args = CommandBuilder.build(
+      media: media,
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        videoBitrateKbps: 100000,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(args, containsAllInOrder(<String>["-b:v", "100000k"]));
+  });
+
+  test("2K and 1.5K tiers scale by height without changing aspect", () {
+    final List<String> twoK = CommandBuilder.build(
+      media: sample(),
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        targetHeight: 1440,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(twoK, containsAllInOrder(<String>["-vf", "scale=-2:1440"]));
+    final List<String> onePointFiveK = CommandBuilder.build(
+      media: sample(),
+      recipe: const ConversionRecipe(
+        videoCodec: VideoCodec.h265,
+        targetHeight: 1220,
+      ),
+      outputPath: "/tmp/out.mp4",
+    );
+    expect(onePointFiveK, containsAllInOrder(<String>["-vf", "scale=-2:1220"]));
+  });
+
   test("output name keeps the source stem and target extension", () {
     final VideoJob job = VideoJob(
       path: "/tmp/clip one.mkv",

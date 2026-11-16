@@ -57,8 +57,8 @@ class LicensesPage extends StatelessWidget {
             context,
             title: S.t("Known limits", "已知边界"),
             body: S.t(
-              "Version 1.0 processes the first video stream and all audio streams. Chapters and global metadata are copied when the target container supports them; subtitle and attachment streams are not copied. Multiple video tracks, HDR metadata and Dolby Vision are not preserved. The Full GPL build uses software encoding; MediaCodec hardware acceleration is not exposed in this release. Very large files need roughly twice their size in free space while the temporary output exists.",
-              "1.0 处理第一条视频流和全部音频流。目标容器支持时，章节和全局元数据会复制；字幕和附件流不会复制。多视频轨、HDR 元数据和杜比视界不会保留。Full GPL 包走软件编码；这一版没有开放 MediaCodec 硬件加速。大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。",
+              "Version 1.5 processes the first video stream and all audio streams. Chapters and global metadata are copied when the target container supports them; subtitle and attachment streams are not copied. Multiple video tracks, HDR metadata and Dolby Vision are not preserved. AV1 is present but not exposed; H.266 has no encoder in this build. The Full GPL build uses software encoding; MediaCodec hardware acceleration is not exposed in this release. Very large files need roughly twice their size in free space while the temporary output exists.",
+              "1.5 处理第一条视频流和全部音频流。目标容器支持时，章节和全局元数据会复制；字幕和附件流不会复制。多视频轨、HDR 元数据和杜比视界不会保留；AV1 未接 UI，H.266 没有编码器。Full GPL 包走软件编码；这一版没有开放 MediaCodec 硬件加速。大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。",
             ),
           ),
           const SizedBox(height: 14),
@@ -107,7 +107,7 @@ class LicensesPage extends StatelessWidget {
             onPressed: () => showLicensePage(
               context: context,
               applicationName: "Reencode",
-              applicationVersion: "1.0.0",
+              applicationVersion: "1.5.0",
               applicationLegalese: S.t(
                 "GPL-3.0. FFmpegKit and bundled libraries keep their own licenses.",
                 "GPL-3.0。FFmpegKit 与随包库各自保留许可。",

@@ -523,6 +523,8 @@ class _HomePageState extends State<HomePage> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
+        _capabilityStrip(scheme),
+        const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.fromLTRB(24, 30, 24, 28),
           decoration: BoxDecoration(
@@ -612,7 +614,7 @@ class _HomePageState extends State<HomePage> {
                 scheme,
                 Icons.memory_rounded,
                 S.t("Codec", "编码"),
-                "H.264 · H.265 · VP9",
+                "H.264 · H.265 · VP9 · MPEG-4",
               ),
             ),
             const SizedBox(width: 10),
@@ -626,7 +628,127 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        _quickSettings(scheme),
       ],
+    );
+  }
+
+  Widget _capabilityStrip(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 13),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.view_carousel_outlined,
+                size: 18,
+                color: scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                S.t("Video codecs", "视频编码"),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              Text(
+                S.t("4 available", "4 种可选"),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: <Widget>[
+              _codecBadge(scheme, "H.264"),
+              _codecBadge(scheme, "H.265"),
+              _codecBadge(scheme, "VP9"),
+              _codecBadge(scheme, "MPEG-4"),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            S.t(
+              "H.265 and VP9 can keep a 10-bit source. H.264 writes 8-bit. MPEG-4 is the legacy fallback.",
+              "H.265 和 VP9 可保留 10-bit 源；H.264 输出 8-bit；MPEG-4 是老设备兜底。",
+            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _codecBadge(ColorScheme scheme, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelLarge
+            ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _quickSettings(ColorScheme scheme) {
+    final String folder = _target?.name ?? S.t("App's own folder", "应用专属目录");
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: _openSettings,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 13, 12, 13),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      S.t("Workspace settings", "工作台设置"),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "$folder · ${S.t('Language', '语言')} · ${S.t('Appearance', '外观')}",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1079,12 +1201,17 @@ class RecipeCard extends StatefulWidget {
 class _RecipeCardState extends State<RecipeCard> {
   late final TextEditingController _videoBitrate;
   late final TextEditingController _audioBitrate;
+  bool _useMbps = false;
+  bool _showSlider = false;
+  bool _fps144Unlocked = false;
+  int _tap120 = 0;
 
   @override
   void initState() {
     super.initState();
+    AppPreferences.revision.addListener(_onPreferencesChanged);
     _videoBitrate = TextEditingController(
-      text: "${widget.recipe.videoBitrateKbps}",
+      text: _formatVideoBitrate(widget.recipe.videoBitrateKbps),
     );
     _audioBitrate = TextEditingController(
       text: "${widget.recipe.audioBitrateKbps}",
@@ -1092,10 +1219,22 @@ class _RecipeCardState extends State<RecipeCard> {
   }
 
   @override
+  void dispose() {
+    AppPreferences.revision.removeListener(_onPreferencesChanged);
+    _videoBitrate.dispose();
+    _audioBitrate.dispose();
+    super.dispose();
+  }
+
+  void _onPreferencesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void didUpdateWidget(covariant RecipeCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.recipe.videoBitrateKbps != widget.recipe.videoBitrateKbps) {
-      final String value = "${widget.recipe.videoBitrateKbps}";
+      final String value = _formatVideoBitrate(widget.recipe.videoBitrateKbps);
       if (_videoBitrate.text != value) _videoBitrate.text = value;
     }
     if (oldWidget.recipe.audioBitrateKbps != widget.recipe.audioBitrateKbps) {
@@ -1104,11 +1243,33 @@ class _RecipeCardState extends State<RecipeCard> {
     }
   }
 
-  @override
-  void dispose() {
-    _videoBitrate.dispose();
-    _audioBitrate.dispose();
-    super.dispose();
+  String _formatVideoBitrate(int kbps) {
+    if (!_useMbps) return "$kbps";
+    final double mbps = kbps / 1000;
+    return mbps == mbps.roundToDouble()
+        ? mbps.toStringAsFixed(0)
+        : mbps
+              .toStringAsFixed(3)
+              .replaceFirst(RegExp(r"0+$"), "")
+              .replaceFirst(RegExp(r"\.$"), "");
+  }
+
+  int? _parseVideoBitrate(String text) {
+    final double? value = double.tryParse(text.trim());
+    if (value == null || value <= 0) return null;
+    final int kbps = (_useMbps ? value * 1000 : value).round();
+    if (kbps < 1 || kbps > 100000) return null;
+    return kbps;
+  }
+
+  void _toggleBitrateUnit() {
+    setState(() => _useMbps = !_useMbps);
+    _videoBitrate.text = _formatVideoBitrate(widget.recipe.videoBitrateKbps);
+  }
+
+  void _setVideoBitrateFromText(String text) {
+    final int? parsed = _parseVideoBitrate(text);
+    if (parsed != null) _setVideoBitrate(parsed);
   }
 
   void _setMode(WorkMode mode) {
@@ -1126,18 +1287,21 @@ class _RecipeCardState extends State<RecipeCard> {
     ConversionRecipe recipe = widget.recipe.copyWith(container: container);
     if (recipe.mode != WorkMode.remux) {
       if (container == TargetContainer.webm) {
-        if (recipe.videoCodec != VideoCodec.vp9)
+        if (recipe.videoCodec != VideoCodec.vp9) {
           recipe = recipe.copyWith(videoCodec: VideoCodec.vp9);
+        }
         if (recipe.audioCodec != AudioCodec.opus &&
             recipe.audioCodec != AudioCodec.copy) {
           recipe = recipe.copyWith(audioCodec: AudioCodec.opus);
         }
       } else if (container == TargetContainer.mp4 ||
           container == TargetContainer.mov) {
-        if (recipe.videoCodec == VideoCodec.vp9)
+        if (recipe.videoCodec == VideoCodec.vp9) {
           recipe = recipe.copyWith(videoCodec: VideoCodec.h264);
-        if (recipe.audioCodec == AudioCodec.opus)
+        }
+        if (recipe.audioCodec == AudioCodec.opus) {
           recipe = recipe.copyWith(audioCodec: AudioCodec.aac);
+        }
       }
     }
     widget.onChanged(recipe);
@@ -1153,13 +1317,103 @@ class _RecipeCardState extends State<RecipeCard> {
     widget.onChanged(widget.recipe.copyWith(audioBitrateKbps: value));
   }
 
+  bool get _experimentalFps => AppPreferences.experimentalFrameRates;
+
+  void _setFrameRateMode(FrameRateMode mode) {
+    if (!widget.enabled) return;
+    _tap120 = 0;
+    widget.onChanged(
+      widget.recipe.copyWith(
+        frameRateMode: mode,
+        targetFps: mode == FrameRateMode.cfr
+            ? (widget.recipe.targetFps > 0 ? widget.recipe.targetFps : 30)
+            : 0,
+      ),
+    );
+  }
+
+  void _selectFps(int fps) {
+    if (!widget.enabled) return;
+    if (fps == 144 && !_fps144Unlocked) return;
+    if (fps == 120) {
+      _tap120++;
+      if (_tap120 >= 4) {
+        _tap120 = 0;
+        widget.onChanged(widget.recipe.copyWith(targetFps: 120));
+        unawaited(_unlock144());
+        return;
+      }
+    } else {
+      _tap120 = 0;
+    }
+    widget.onChanged(widget.recipe.copyWith(targetFps: fps));
+  }
+
+  Future<void> _unlock144() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext ctx) => AppDialog(
+        icon: Icons.warning_amber_rounded,
+        title: S.t("Unlock 144 fps?", "解锁 144 帧？"),
+        message: S.t(
+          "144 fps is a low-level experimental target. It only repeats or drops frames; it does not interpolate. Many phones will overheat, stutter, or fail. Use it for short tests only.",
+          "144 帧属于底层实验档。它只补重复帧或丢帧，不做插帧。很多手机会发热、卡顿甚至失败。只建议短片段测试。",
+        ),
+        secondaryLabel: S.t("Not now", "暂不"),
+        secondaryResult: false,
+        primaryLabel: S.t("Unlock", "解锁"),
+        primaryResult: true,
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() => _fps144Unlocked = true);
+    }
+  }
+
   List<int> get _heights {
     final int source = widget.sample?.video?.height ?? 0;
-    final List<int> values = <int>[0];
-    for (final int value in <int>[2160, 1440, 1080, 720, 480]) {
-      if (source > 0 && value <= source) values.add(value);
-    }
+    final List<int> values = <int>[0, 2160, 1440, 1220, 1080, 720, 480];
+    if (source > 0 && !values.contains(source)) values.add(source);
+    values.sort((int a, int b) {
+      if (a == 0) return 1;
+      if (b == 0) return -1;
+      return b.compareTo(a);
+    });
     return values;
+  }
+
+  String _heightLabel(int height) {
+    return switch (height) {
+      0 => S.t("Original", "原始"),
+      2160 => S.t("4K (2160p)", "4K（2160p）"),
+      1440 => S.t("2K (1440p)", "2K（1440p）"),
+      1220 => S.t("1.5K (1220p, exp.)", "1.5K（1220p，实验）"),
+      1080 => "1080p",
+      720 => "720p",
+      480 => "480p",
+      _ => "${height}p",
+    };
+  }
+
+  bool _depthEnabled(PixelDepth depth) {
+    final int sourceBits = widget.sample?.video?.bitDepth ?? 0;
+    final bool known = widget.sample?.video?.hasKnownDepth ?? false;
+    if (depth == PixelDepth.auto) return true;
+    if (widget.recipe.videoCodec == VideoCodec.h264 ||
+        widget.recipe.videoCodec == VideoCodec.mpeg4) {
+      return depth == PixelDepth.eight;
+    }
+    if (depth == PixelDepth.eight) return true;
+    if (!known || sourceBits < depth.bits!) return false;
+    if (widget.recipe.videoCodec == VideoCodec.vp9 &&
+        depth == PixelDepth.twelve) {
+      return false;
+    }
+    if (widget.recipe.videoCodec != VideoCodec.h265 &&
+        depth == PixelDepth.twelve) {
+      return false;
+    }
+    return true;
   }
 
   @override
@@ -1364,21 +1618,27 @@ class _RecipeCardState extends State<RecipeCard> {
               child: TextField(
                 controller: _videoBitrate,
                 enabled: widget.enabled,
-                keyboardType: TextInputType.number,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                decoration: const InputDecoration(
-                  suffixText: "kbps",
-                  hintText: "2000",
+                keyboardType: TextInputType.numberWithOptions(
+                  decimal: _useMbps,
                 ),
-                onChanged: (String value) {
-                  final int? parsed = int.tryParse(value);
-                  if (parsed != null) _setVideoBitrate(parsed);
-                },
+                inputFormatters: <TextInputFormatter>[
+                  if (_useMbps)
+                    FilteringTextInputFormatter.allow(RegExp(r"[0-9.]"))
+                  else
+                    FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: InputDecoration(
+                  suffixText: _useMbps ? "Mbps" : "kbps",
+                  hintText: _useMbps ? "2" : "2000",
+                ),
+                onChanged: _setVideoBitrateFromText,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: widget.enabled ? _toggleBitrateUnit : null,
+              child: Text(_useMbps ? "Mbps" : "kbps"),
+            ),
             if (widget.sample?.video?.bitrateKbps != null)
               TextButton(
                 onPressed: widget.enabled
@@ -1391,24 +1651,68 @@ class _RecipeCardState extends State<RecipeCard> {
         const SizedBox(height: 8),
         Text(
           S.t(
-            "1–100000 kbps. Values under 64 kbps are allowed; they are an experimental low-bitrate mode.",
-            "1–100000 kbps。低于 64 kbps 也能压，属于实验性低码率档。",
+            "1–100000 kbps (up to 100 Mbps). Type an exact number, or drag the slider for a rough value. Tap the unit to switch kbps / Mbps.",
+            "1–100000 kbps（最高 100 Mbps）。数字精调，滑块粗调；点单位可在 kbps / Mbps 之间切换。",
           ),
           style: Theme.of(context).textTheme.labelSmall
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Text(
+              S.t("Precision", "精确输入"),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: widget.enabled
+                  ? () => setState(() => _showSlider = !_showSlider)
+                  : null,
+              child: Text(
+                _showSlider ? S.t("Hide slider", "收起滑块") : S.t("Slider", "滑块"),
+              ),
+            ),
+          ],
+        ),
+        if (_showSlider)
+          Slider(
+            value: widget.recipe.videoBitrateKbps.clamp(1, 100000).toDouble(),
+            min: 1,
+            max: 100000,
+            divisions: 999,
+            label: _formatVideoBitrate(widget.recipe.videoBitrateKbps),
+            onChanged: widget.enabled
+                ? (double value) => _setVideoBitrate(value.round())
+                : null,
+          ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: <int>[10, 50, 100, 250, 500, 1000, 2000, 4000].map((
-            int value,
-          ) {
-            return ActionChip(
-              onPressed: widget.enabled ? () => _setVideoBitrate(value) : null,
-              label: Text("$value kbps"),
-            );
-          }).toList(),
+          children:
+              <int>[
+                10,
+                50,
+                100,
+                250,
+                500,
+                1000,
+                2000,
+                4000,
+                10000,
+                20000,
+                40000,
+                80000,
+                100000,
+              ].map((int value) {
+                return ActionChip(
+                  onPressed: widget.enabled
+                      ? () => _setVideoBitrate(value)
+                      : null,
+                  label: Text(_formatVideoBitrate(value)),
+                );
+              }).toList(),
         ),
         const SizedBox(height: 16),
         _label(scheme, S.t("Resolution", "分辨率")),
@@ -1417,9 +1721,6 @@ class _RecipeCardState extends State<RecipeCard> {
           spacing: 8,
           runSpacing: 8,
           children: _heights.map((int height) {
-            final String label = height == 0
-                ? S.t("Source", "原始")
-                : "${height}p";
             return ChoiceChip(
               selected: widget.recipe.targetHeight == height,
               onSelected: widget.enabled
@@ -1427,28 +1728,153 @@ class _RecipeCardState extends State<RecipeCard> {
                       widget.recipe.copyWith(targetHeight: height),
                     )
                   : null,
-              label: Text(label),
+              label: Text(_heightLabel(height)),
             );
           }).toList(),
         ),
         const SizedBox(height: 8),
+        Text(
+          S.t(
+            "Tiers keep the source aspect. “Original” keeps its exact size. 1.5K is experimental and will not restore detail the source never had.",
+            "档位按源比例缩放；“原始”保持原尺寸。1.5K 是实验档，不会把源里没有的细节变出来。",
+          ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        _label(scheme, S.t("Bit depth", "位深")),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: PixelDepth.values.map((PixelDepth depth) {
+            final bool enabled = _depthEnabled(depth);
+            return ChoiceChip(
+              selected: widget.recipe.pixelDepth == depth,
+              onSelected: widget.enabled && enabled
+                  ? (_) => widget.onChanged(
+                      widget.recipe.copyWith(pixelDepth: depth),
+                    )
+                  : null,
+              label: Text(depth.label),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          widget.sample?.video?.hasKnownDepth == true
+              ? S.t(
+                  "Source: ${widget.sample!.video!.bitDepth}-bit. Options the source does not contain are disabled. 12-bit is H.265-only and experimental.",
+                  "源：${widget.sample!.video!.bitDepth}-bit。源里没有的位深会灰显。12-bit 只给 H.265，且标实验。",
+                )
+              : S.t(
+                  "Source depth is unknown. Only 8-bit and automatic are safe defaults.",
+                  "源位深未知。稳妥起见只开 8-bit 和自动保留。",
+                ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
         _label(scheme, S.t("Frame rate", "帧率")),
         const SizedBox(height: 8),
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: <int>[0, 60, 30, 24].map((int fps) {
-            final String label = fps == 0 ? S.t("Source", "原始") : "$fps fps";
+          children: FrameRateMode.values.map((FrameRateMode mode) {
             return ChoiceChip(
-              selected: widget.recipe.targetFps == fps,
+              selected: widget.recipe.frameRateMode == mode,
               onSelected: widget.enabled
-                  ? (_) =>
-                        widget.onChanged(widget.recipe.copyWith(targetFps: fps))
+                  ? (_) => _setFrameRateMode(mode)
                   : null,
-              label: Text(label),
+              label: Text(mode.label),
             );
           }).toList(),
         ),
+        const SizedBox(height: 8),
+        if (widget.recipe.frameRateMode == FrameRateMode.passthrough)
+          Text(
+            S.t(
+              "Keep the source timing. No -r, no forced CFR. This is the safest option for odd rates like 23.976 or 29.97.",
+              "保持源时间基，不加 -r，也不强制 CFR。23.976、29.97 这类非整数帧率最稳。",
+            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          )
+        else ...[
+          Row(
+            children: [
+              Text(
+                S.t("24–60 fps", "24–60 帧"),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Text(
+                "${widget.recipe.targetFps.clamp(24, 60)} fps",
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
+          Slider(
+            value: widget.recipe.targetFps.clamp(24, 60).toDouble(),
+            min: 24,
+            max: 60,
+            divisions: 36,
+            label: "${widget.recipe.targetFps.clamp(24, 60)} fps",
+            onChanged: widget.enabled
+                ? (double value) => _selectFps(value.round())
+                : null,
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <int>[24, 30, 60].map((int fps) {
+              return ChoiceChip(
+                selected: widget.recipe.targetFps == fps,
+                onSelected: widget.enabled ? (_) => _selectFps(fps) : null,
+                label: Text("$fps fps"),
+              );
+            }).toList(),
+          ),
+          if (_experimentalFps) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <int>[90, 120].map((int fps) {
+                return ChoiceChip(
+                  selected: widget.recipe.targetFps == fps,
+                  onSelected: widget.enabled ? (_) => _selectFps(fps) : null,
+                  label: Text("$fps fps"),
+                );
+              }).toList(),
+            ),
+          ],
+          if (_fps144Unlocked) ...[
+            const SizedBox(height: 8),
+            ChoiceChip(
+              selected: widget.recipe.targetFps == 144,
+              onSelected: widget.enabled ? (_) => _selectFps(144) : null,
+              label: Text(S.t("144 fps (high risk)", "144 帧（高危）")),
+            ),
+          ],
+          if (widget.recipe.targetFps >= 90) ...[
+            const SizedBox(height: 8),
+            Text(
+              widget.recipe.targetFps >= 144
+                  ? S.t(
+                      "144 fps is experimental and high-risk. Fixed-rate conversion repeats or drops frames; it does not add real motion.",
+                      "144 帧是实验高危档。固定帧率只补重复帧或丢帧，不会增加真实运动。",
+                    )
+                  : S.t(
+                      "90/120 fps are experimental. Fixed-rate conversion repeats or drops frames; it does not make 30 fps source look smoother.",
+                      "90/120 帧是实验档。固定帧率只补重复帧或丢帧；30 帧源不会因此变流畅。",
+                    ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.error),
+            ),
+          ],
+        ],
         if (hasAudio) ...[
           const SizedBox(height: 16),
           _label(scheme, S.t("Audio codec", "音频编码")),

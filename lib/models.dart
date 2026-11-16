@@ -90,7 +90,34 @@ extension VideoCodecInfo on VideoCodec {
   };
 }
 
+enum PixelDepth { auto, eight, ten, twelve }
+
+extension PixelDepthInfo on PixelDepth {
+  String get label => switch (this) {
+    PixelDepth.auto => S.t("Preserve", "保留"),
+    PixelDepth.eight => "8-bit",
+    PixelDepth.ten => "10-bit",
+    PixelDepth.twelve => "12-bit",
+  };
+
+  int? get bits => switch (this) {
+    PixelDepth.auto => null,
+    PixelDepth.eight => 8,
+    PixelDepth.ten => 10,
+    PixelDepth.twelve => 12,
+  };
+}
+
 enum AudioCodec { aac, opus, mp3, copy }
+
+enum FrameRateMode { passthrough, cfr }
+
+extension FrameRateModeInfo on FrameRateMode {
+  String get label => switch (this) {
+    FrameRateMode.passthrough => S.t("Passthrough", "跟随源"),
+    FrameRateMode.cfr => S.t("CFR", "固定帧率"),
+  };
+}
 
 extension AudioCodecInfo on AudioCodec {
   String get label => switch (this) {
@@ -140,13 +167,21 @@ class StreamSummary {
     this.rotation = 0,
   });
 
-  bool get isTenBit =>
-      pixelFormat.contains("10le") ||
-      pixelFormat.contains("10be") ||
-      pixelFormat.contains("12le") ||
-      pixelFormat.contains("12be");
+  bool get isTenBit => bitDepth >= 10;
 
-  String get resolution => width > 0 && height > 0 ? "${width}×$height" : "—";
+  int get bitDepth {
+    if (pixelFormat.contains("12le") || pixelFormat.contains("12be")) {
+      return 12;
+    }
+    if (pixelFormat.contains("10le") || pixelFormat.contains("10be")) {
+      return 10;
+    }
+    return 8;
+  }
+
+  bool get hasKnownDepth => pixelFormat.isNotEmpty;
+
+  String get resolution => width > 0 && height > 0 ? "$width×$height" : "—";
 
   String get fpsLabel =>
       fps > 0 ? "${fps.toStringAsFixed(fps >= 10 ? 0 : 2)} fps" : "—";
@@ -304,6 +339,8 @@ class ConversionRecipe {
   final int audioBitrateKbps;
   final int targetHeight;
   final int targetFps;
+  final PixelDepth pixelDepth;
+  final FrameRateMode frameRateMode;
 
   const ConversionRecipe({
     this.mode = WorkMode.transcode,
@@ -314,6 +351,8 @@ class ConversionRecipe {
     this.audioBitrateKbps = 128,
     this.targetHeight = 0,
     this.targetFps = 0,
+    this.pixelDepth = PixelDepth.auto,
+    this.frameRateMode = FrameRateMode.passthrough,
   });
 
   ConversionRecipe copyWith({
@@ -325,6 +364,8 @@ class ConversionRecipe {
     int? audioBitrateKbps,
     int? targetHeight,
     int? targetFps,
+    PixelDepth? pixelDepth,
+    FrameRateMode? frameRateMode,
   }) {
     return ConversionRecipe(
       mode: mode ?? this.mode,
@@ -335,6 +376,8 @@ class ConversionRecipe {
       audioBitrateKbps: audioBitrateKbps ?? this.audioBitrateKbps,
       targetHeight: targetHeight ?? this.targetHeight,
       targetFps: targetFps ?? this.targetFps,
+      pixelDepth: pixelDepth ?? this.pixelDepth,
+      frameRateMode: frameRateMode ?? this.frameRateMode,
     );
   }
 
@@ -376,6 +419,7 @@ class ConversionRecipe {
         audioCodec: AudioCodec.copy,
         targetHeight: 0,
         targetFps: 0,
+        frameRateMode: FrameRateMode.passthrough,
       );
     }
     if (mode == WorkMode.compress) {
@@ -534,41 +578,154 @@ class ConversionRecipe {
         ),
       );
     }
+    if (targetHeight == 1220) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "1.5K is an experimental height for 2712×1220-class phone screens. It scales to the source aspect and does not add detail.",
+            "1.5K 是给 2712×1220 这类手机屏的实验档，按源比例缩放，不会增加细节。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    final int? requestedBits = pixelDepth.bits;
+    final int sourceBits = media.video?.bitDepth ?? 8;
+    if (requestedBits == null &&
+        media.video?.hasKnownDepth == true &&
+        sourceBits > 8 &&
+        (videoCodec == VideoCodec.h264 || videoCodec == VideoCodec.mpeg4)) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "This codec writes 8-bit; the $sourceBits-bit source will lose depth.",
+            "这个编码只写 8-bit；$sourceBits-bit 源会掉位深。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (requestedBits == null &&
+        media.video?.hasKnownDepth == true &&
+        sourceBits == 12) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "The 12-bit source is kept, but phone playback support is uncommon.",
+            "保留了 12-bit 源，但手机能正常播放的设备不多。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (requestedBits != null) {
+      if (videoCodec == VideoCodec.h264 || videoCodec == VideoCodec.mpeg4) {
+        if (requestedBits > 8) {
+          issues.add(
+            RecipeIssue(
+              S.t(
+                "H.264 and MPEG-4 output 8-bit only.",
+                "H.264 和 MPEG-4 只能输出 8-bit。",
+              ),
+            ),
+          );
+        }
+      } else if (videoCodec == VideoCodec.vp9 && requestedBits > 10) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "VP9 in this build supports 8-bit and 10-bit, not 12-bit.",
+              "这版 VP9 只支持 8-bit 和 10-bit，不做 12-bit。",
+            ),
+          ),
+        );
+      } else if (requestedBits == 12 && videoCodec != VideoCodec.h265) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "12-bit output is only available for H.265 in this build.",
+              "这版只有 H.265 能输出 12-bit。",
+            ),
+          ),
+        );
+      }
+      if (media.video?.hasKnownDepth == true && requestedBits > sourceBits) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "The source is $sourceBits-bit. Higher output depth does not add real detail.",
+              "源是 $sourceBits-bit，提高输出位深不会增加真实细节。",
+            ),
+            blocking: false,
+          ),
+        );
+      }
+      if (media.video?.hasKnownDepth == true && requestedBits < sourceBits) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "The source is $sourceBits-bit. This target will reduce the depth.",
+              "源是 $sourceBits-bit，这个目标会降低位深。",
+            ),
+            blocking: false,
+          ),
+        );
+      }
+    }
+    if (videoCodec == VideoCodec.h265 && requestedBits == 12) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "12-bit H.265 is experimental; playback support is uncommon.",
+            "12-bit H.265 属于实验档，能正常播放的设备不多。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
     return issues;
   }
 
   bool _containerAcceptsVideo(TargetContainer container, String codec) {
     final String normalized = codec.toLowerCase();
-    if (normalized == "libx264")
+    if (normalized == "libx264") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.mov;
-    if (normalized == "libx265")
+    }
+    if (normalized == "libx265") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.mov;
-    if (normalized == "libvpx-vp9")
+    }
+    if (normalized == "libvpx-vp9") {
       return container == TargetContainer.mkv ||
           container == TargetContainer.webm;
-    if (normalized == "mpeg4")
+    }
+    if (normalized == "mpeg4") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.mov;
-    if (normalized == "h264")
+    }
+    if (normalized == "h264") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.mov;
-    if (normalized == "hevc")
+    }
+    if (normalized == "hevc") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.mov;
-    if (normalized == "vp9" || normalized == "vp8")
+    }
+    if (normalized == "vp9" || normalized == "vp8") {
       return container == TargetContainer.mkv ||
           container == TargetContainer.webm;
-    if (normalized == "av1")
+    }
+    if (normalized == "av1") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.webm;
+    }
     return container == TargetContainer.mkv;
   }
 
@@ -603,6 +760,12 @@ class ConversionRecipe {
           ? S.t("audio copy", "音频复制")
           : audioCodec.label,
     ];
+    if (pixelDepth != PixelDepth.auto) {
+      parts.insert(3, pixelDepth.label);
+    }
+    if (frameRateMode == FrameRateMode.cfr && targetFps > 0) {
+      parts.insert(3, "CFR $targetFps");
+    }
     if (targetHeight > 0) parts.insert(2, "${targetHeight}p");
     return parts.join(" · ");
   }

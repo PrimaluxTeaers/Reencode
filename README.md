@@ -1,88 +1,75 @@
 # Reencode
 
-Android 与 Windows 视频转码工具。三种操作：只换容器、换编码、压码率。同一个文件可以只改一项，也可以同时换编码和容器。离线运行，无广告，无统计。
+Android 视频转码工具。离线运行，无广告，无统计。三个入口：只换容器、换编码、压码率。
 
-Reencode 用 FFmpeg 8.1.2 转码。只换容器走流复制，不重新编码；换编码和压码率会重新编码，界面会在开始前标出。
+首页直接列出四种视频编码：H.264、H.265 / HEVC、VP9、MPEG-4。MPEG-4 不是隐藏项，选编码时就在这一行里。转码由 FFmpeg 8.1.2 执行，只换容器走流复制，换编码和压码率会重新编码。
 
-## 平台
+[English](README.en.md)
 
-Android：arm64-v8a，最低 Android 7.0（API 24）。
-
-Windows：x64，Windows 10 / 11。发行包是 zip，解压后运行 `reencode.exe`；`ffmpeg.exe` 和 `ffprobe.exe` 在旁边的 `ffmpeg` 文件夹里，不依赖系统 PATH。Windows 源码在 `windows-port` 分支，发行包在 `windows-v1.0.0` Release。
-
-Windows 7 / 8 / 8.1 没有构建。Flutter 的 Windows 运行时最低是 Windows 10，这三个系统要另做界面外壳，目前没有做。
-
-只发 64 位。macOS、iPhone、iPad 没有适配计划。
-
-## 功能
+## 能做什么
 
 - 容器：MP4、MKV、MOV、WebM。
 - 视频编码：H.264、H.265 / HEVC、VP9、MPEG-4。
 - 音频编码：AAC、Opus、MP3、原样复制。
-- 目标视频码率、分辨率（原始 / 2160 / 1440 / 1080 / 720 / 480）、帧率（原始 / 60 / 30 / 24）、音频码率。视频码率最低 1 kbps，低于 64 kbps 会提示实验性低码率档；音频最低 8 kbps。
+- 目标视频码率 1–100000 kbps，最高等效 100 Mbps。数字框可精调，滑块可粗调，点单位在 kbps / Mbps 之间切换；低于 64 kbps 会标为实验性低码率。
+- 分辨率：原始、4K（2160p）、2K（1440p）、1.5K（1220p，实验）、1080p、720p、480p。只改输出尺寸，不会把原片没有的细节补回来。
+- 位深：保留、8-bit、10-bit、12-bit。H.265 / VP9 可保留 10-bit；H.265 额外开放 12-bit 实验项；H.264 和 MPEG-4 固定 8-bit。源文件没有的位深选项会灰掉。
+- 帧率：跟随源（Passthrough）或固定帧率（CFR）。24–60 连续可调；90 / 120 要在设置页打开“实验功能”后出现；144 还要连续点 120 帧四次并读完警告才会解锁。
+- 固定帧率只做丢帧或补重复帧，不做插帧。90 / 120 / 144 是实验档，发热、卡顿和编码失败都可能发生。普通手机用户保持 60 帧就够。
 - 多文件导入、逐个探测、队列顺序转码、实时进度、取消。
-- 10-bit 源在 H.265 / VP9 输出时保留 10-bit 像素格式；HDR 元数据不保留。
-- 转换前做参数预检：容器和编码不兼容、码率越界、源音频不能复制进目标容器，都会先拦下。
-- 设置里可以授权一个持久文件夹（Android SAF）。授权后结果直接写进去，重启仍然有效；结果卡只显示“已完成”，不再给分享按钮。
-- 中文 / English 运行时切换。主题、主题色、输出目录都在设置页。
-
-Windows 版的 H.264 / H.265 可以使用 NVIDIA NVENC 和 AMD AMF；启动时先按 PCI 厂商 ID 识别，再实际跑一帧确认编码器能启动。Intel、Arc 和其他厂商退回 CPU 编码，设置页会标明原因。CPU 按物理核数和 L3 缓存分档，6 核是下限。Android 版没有开放 MediaCodec 硬件编码。
+- 转码前预检：容器和编码不兼容、码率越界、源音频不能复制进目标容器，先拦下来。
+- 设置页可授权持久输出目录（Android SAF），重启后仍有效；结果卡只显示“已完成”，不再出现分享按钮。
+- 中文 / English 运行时切换。主题、主题色、输出目录和实验功能都在设置页。
 
 ## 安装
 
-Android：到 [Releases](https://github.com/PrimaluxTeaers/Reencode/releases) 下载 `Reencode-1.0.0-arm64-v8a-newicon.apk`。最低 Android 7.0（API 24），没有上架应用商店。
+到 [Releases](https://github.com/PrimaluxTeaers/Reencode/releases) 下载 arm64-v8a APK。最低 Android 7.0（API 24）。没有上架应用商店。
 
-Windows：到 [windows-v1.0.0](https://github.com/PrimaluxTeaers/Reencode/releases/tag/windows-v1.0.0) 下载 `Reencode-windows-x64.zip`，解压后运行。只支持 Win10/11 x64。
+只提供 arm64-v8a。armeabi-v7a 和 x86_64 没有随包提供。
 
-首版只打 arm64-v8a。armeabi-v7a 和 x86_64 没有随包提供。
-
-签名用的是这个项目自己的证书，和 Timbre 不共用。两个应用不能互相覆盖安装。
+包名 `com.teacers.reencode`，签名用本项目自己的证书，和 Timbre 不共用。两个应用不能互相覆盖安装。
 
 ## 构建
 
-Android 需要 Flutter 3.50.0、Dart 3.14、JDK 17、Android SDK 35。
+需要 Flutter 3.50.0、Dart 3.14、JDK 17、Android SDK 36。
 
 ```bash
 flutter pub get
 flutter build apk --release --target-platform android-arm64 --split-per-abi
 ```
 
-Windows 需要 Flutter 3.50.0 与 Visual Studio 2022 的 C++ 桌面工作负载，只能出 x64。Windows 目录由 CI 用 `flutter create --platforms=windows` 生成，构建后把 `ffmpeg.exe` 和 `ffprobe.exe` 放进输出目录的 `ffmpeg` 子文件夹。
-
-FFmpegKit Flutter 包放在 `third_party/ffmpeg_kit_flutter_new`。这是上游 4.6.8 的副本，Dart 接口和原生代码没有改，只改了 `android/build.gradle` 的 AGP 版本和仓库地址，让它能在当前 Flutter / Gradle 组合里构建。Windows 不走 FFmpegKit，直接启动 `ffmpeg.exe` 子进程；这份副本的 `pubspec.yaml` 去掉了 windows 与 linux 平台声明。
+FFmpegKit Flutter 包放在 `third_party/ffmpeg_kit_flutter_new`。这是上游 4.6.8 的副本，Dart 接口和原生代码没改，只改了 `android/build.gradle` 的 AGP 版本和仓库地址，让它在当前 Flutter / Gradle 组合里能构建。升级 Flutter、AGP 或 Gradle 前先检查这个文件。
 
 ## 许可
 
-Reencode 按 GPL-3.0 分发，不是 LGPL。
+Reencode 按 **GPL-3.0** 分发。
 
-它使用 FFmpegKit Flutter 4.6.8 Full GPL 包，里面带 x264、x265、xvidcore、vid.stab 这些 GPL 编码库。应用包含这些库，所以整体按 GPL-3.0 分发。Windows 包内的 FFmpeg 是 BtbN 的 GPL 构建，许可证不变。
+它使用 FFmpegKit Flutter 4.6.8 的 Full GPL 包，里面带 x264、x265、xvidcore、vid.stab 等 GPL 编码库。应用包含这些库，整体按 GPL-3.0 分发。这样做是为了在没有硬件编码器或硬件编码器不可靠的设备上，仍然能用 H.264 / H.265 软件编码。
 
 - 应用许可证全文：[LICENSE](LICENSE)
 - 第三方组件、版本、许可证和链接：[THIRD_PARTY.md](THIRD_PARTY.md)
-- 每个 Android 发行版附带源码包，内容就是构建该 APK 的代码。
+- 每个发行版附带源码包，内容就是构建该 APK 的代码。
 
 ## 隐私
 
 Release APK 不申请 `INTERNET` 权限。没有广告 SDK，没有统计 SDK，不上传视频、文件名、设备标识或转换日志。文件只从你选择的路径读，只写到你选择的文件夹或应用缓存。
 
-Windows 版在探测硬件时调用一次本地 WMI 读 CPU 和显卡名称，不联网，结果不保存也不上传。
-
 ## 已知边界
 
-- 只处理第一条视频流和全部音频流。字幕流、附件流不复制。
+- 只处理第一条视频流和全部音频流。字幕、附件不复制。
 - 目标容器支持时，章节和全局元数据会复制；复杂章节结构可能被简化。
-- 多视频轨、HDR 元数据、杜比视界不保留。
-- Android 版只走软件编码，没有开放 MediaCodec 硬件编码。Windows 版按 NVENC / AMF 白名单走硬件编码，白名单外的显卡一律软件编码。
+- 10-bit / 12-bit 只表示像素位深，不等于 HDR。HDR10 静态元数据（Mastering Display、CLL）、HDR10+ 动态元数据和杜比视界目前都不写入输出。杜比视界需要原样保留时，用“只换容器 + 原样复制”。
+- 没有开放 MediaCodec 硬件编码，也没有 GPU 编码或 GPU 滤镜。当前走 FFmpeg 软件路径。
+- AV1 的 `libaom-av1` 在包内，但 1.5 没有接 UI，不作为可选编码。H.266 / VVC 只有设备或 FFmpeg 提供的解码路径，没有 `libvvenc`，不能编码；H.266 不进入稳定版。
+- 多视频轨不处理。
 - 大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。
 - 预检只拦明确不兼容的组合，最终能不能封装仍以 FFmpeg 的结果为准。
 
 ## 开发
 
 ```bash
-flutter analyze
+flutter analyze lib test
 flutter test
 ```
 
-`lib/models.dart` 放媒体摘要、编码 / 容器枚举、配方和预检；`lib/command_builder.dart` 只生成 FFmpeg 参数，不碰原生层；`lib/engine.dart` 负责 FFprobe、FFmpeg 执行、进度和取消。参数规则可以单独测试，不需要加载 native 库。
-
-Windows 分支的引擎在 `lib/engine_windows.dart`，硬件判断在 `lib/hardware_profile.dart`。`main` 与 `windows-port` 不自动合并。
+`lib/models.dart` 放媒体摘要、编码 / 容器枚举、配方和预检；`lib/command_builder.dart` 只生成 FFmpeg 参数；`lib/engine.dart` 负责 FFprobe、FFmpeg 执行、进度和取消。参数规则可以单独测试，不需要加载 native 库。

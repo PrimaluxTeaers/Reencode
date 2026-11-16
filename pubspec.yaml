@@ -1,7 +1,7 @@
 name: reencode
 description: "Reencode — video bitrate, codec and container conversion for Android."
 publish_to: "none"
-version: 1.0.0+1000
+version: 1.5.0+1500
 
 environment:
   sdk: ^3.14.0

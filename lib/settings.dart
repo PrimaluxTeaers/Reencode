@@ -8,7 +8,7 @@ import "output_store.dart";
 import "page_route.dart";
 import "theme.dart";
 
-const String kAppVersion = "1.0.0";
+const String kAppVersion = "1.5.0";
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -120,6 +120,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 _folderPanel(scheme),
                 const SizedBox(height: 16),
                 _appearancePanel(scheme),
+                const SizedBox(height: 16),
+                _experimentalPanel(scheme),
                 const SizedBox(height: 16),
                 _aboutPanel(scheme),
               ]),
@@ -336,6 +338,47 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               );
             }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _experimentalPanel(ColorScheme scheme) {
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelTitle(
+            scheme,
+            Icons.science_outlined,
+            S.t("Experimental tools", "实验功能"),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            S.t(
+              "Enables 90 and 120 fps. 144 fps is hidden behind four taps on 120 and a separate warning. Fixed-rate conversion only repeats or drops frames; it does not make motion smoother.",
+              "开启后出现 90 和 120 帧。144 帧藏在“连续点 120 帧四次”之后，并单独警告。固定帧率只补重复帧或丢帧，不会让画面变流畅。",
+            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Show 90 / 120 fps", "显示 90 / 120 帧")),
+            subtitle: Text(
+              S.t(
+                "There is a deeper, riskier option above 120 fps. You only see it after unlocking 120 and reading the warning.",
+                "120 帧以上还有一个更底层、风险更高的选项；解锁 120 并看完警告后才会出现。",
+              ),
+            ),
+            value: AppPreferences.experimentalFrameRates,
+            onChanged: (bool value) {
+              HapticFeedback.selectionClick();
+              AppPreferences.setExperimentalFrameRates(value);
+            },
           ),
         ],
       ),

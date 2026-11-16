@@ -59,6 +59,7 @@ class AppPreferences {
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
   static ThemeMode themeMode = ThemeMode.system;
   static Color seed = const Color(0xFF0F5F66);
+  static bool experimentalFrameRates = false;
 
   static Future<void> load() async {
     try {
@@ -73,6 +74,7 @@ class AppPreferences {
       }
       final int? storedSeed = prefs.getInt("accentSeed");
       if (storedSeed != null) seed = Color(storedSeed);
+      experimentalFrameRates = prefs.getBool("experimentalFrameRates") ?? false;
     } catch (_) {}
   }
 
@@ -100,6 +102,16 @@ class AppPreferences {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setInt("accentSeed", value.toARGB32());
+    } catch (_) {}
+  }
+
+  static Future<void> setExperimentalFrameRates(bool value) async {
+    if (experimentalFrameRates == value) return;
+    experimentalFrameRates = value;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool("experimentalFrameRates", value);
     } catch (_) {}
   }
 }

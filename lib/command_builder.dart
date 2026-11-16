@@ -27,6 +27,7 @@ class CommandBuilder {
     }
 
     args.addAll(<String>["-c:v", recipe.videoCodec.ffmpegName]);
+    final int targetBits = _targetBits(recipe, media);
     switch (recipe.videoCodec) {
       case VideoCodec.h264:
         args.addAll(<String>[
@@ -53,7 +54,7 @@ class CommandBuilder {
           "-bufsize",
           "${recipe.videoBitrateKbps * 2}k",
           "-pix_fmt",
-          media.video?.isTenBit == true ? "yuv420p10le" : "yuv420p",
+          _pixelFormat(targetBits),
           "-tag:v",
           "hvc1",
           "-x265-params",
@@ -75,7 +76,7 @@ class CommandBuilder {
           "-row-mt",
           "1",
           "-pix_fmt",
-          media.video?.isTenBit == true ? "yuv420p10le" : "yuv420p",
+          _pixelFormat(targetBits),
         ]);
         break;
       case VideoCodec.mpeg4:
@@ -91,8 +92,11 @@ class CommandBuilder {
     if (recipe.targetHeight > 0) {
       args.addAll(<String>["-vf", "scale=-2:${recipe.targetHeight}"]);
     }
-    if (recipe.targetFps > 0) {
-      args.addAll(<String>["-r", "${recipe.targetFps}"]);
+    if (recipe.frameRateMode == FrameRateMode.cfr) {
+      args.addAll(<String>["-vsync", "cfr"]);
+      if (recipe.targetFps > 0) {
+        args.addAll(<String>["-r", "${recipe.targetFps}"]);
+      }
     }
 
     if (media.hasAudio) {
@@ -114,5 +118,19 @@ class CommandBuilder {
     }
     args.add(outputPath);
     return args;
+  }
+
+  static int _targetBits(ConversionRecipe recipe, MediaSummary media) {
+    final int? requested = recipe.pixelDepth.bits;
+    if (requested != null) return requested;
+    return media.video?.bitDepth ?? 8;
+  }
+
+  static String _pixelFormat(int bits) {
+    return switch (bits) {
+      12 => "yuv420p12le",
+      10 => "yuv420p10le",
+      _ => "yuv420p",
+    };
   }
 }
