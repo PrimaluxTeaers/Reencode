@@ -14,7 +14,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download 44101608214 -n Reencode-WindowsX86-64-1.6.0 -D windows
+          gh run download 44101608214 -R PrimaluxTeaers/Reencode -n Reencode-WindowsX86-64-1.6.0 -D windows
           find windows -type f -maxdepth 2 -printf '%p %s bytes\n'
 
       - name: Download Android APK
@@ -23,4 +23,4 @@ jobs:
       - name: Upload assets to v1.6.0
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v1.6.0 windows/*.zip Reencode-AndroidARM64-v8a-1.6.0.apk --clobber
+        run: gh release upload v1.6.0 -R PrimaluxTeaers/Reencode windows/*.zip Reencode-AndroidARM64-v8a-1.6.0.apk --clobber
