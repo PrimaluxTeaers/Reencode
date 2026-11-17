@@ -1,0 +1,39 @@
+name: Patch README
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Rewrite README
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('README.md')
+          s = p.read_text()
+          s = s.replace('# Reencode\n\nReencode 是一个', '# Reencode / 视频转码\n\nReencode 是一个', 1)
+          zh_old = 'Reencode 是一个离线视频转码工具。它把码率、编码、容器、分辨率和音频放在同一张工作台上，适合批量处理手机里的视频。没有广告，没有统计，不联网，也不上传文件。'
+          zh_new = zh_old + '''\n\n## 关于这个项目\n\nReencode / 视频转码 是免费开源的离线工具，任何人都可以免费使用、修改、分发和自行构建，只要遵守 GPL-3.0。也完全允许其他人基于它做同类软件或另起分支；比起复制一个成品，更希望这套代码能让人自己搭出能用的版本。项目由多个现成组件拼装而成，作者本人也是被“找不到能用的转码工具、专业软件又太贵”困住的人。测试设备有限，遇到 bug 请见谅，也欢迎提交问题。没有把 Reencode 和 Timbre 合并成一个大型项目的打算，两个都只是小工具；更新完全随缘，能走到 1.6 靠的是想把它们做完整一点的心。'''
+          s = s.replace(zh_old, zh_new, 1)
+          s = s.replace('Windows 版随 1.6 一起构建，应用名为 **Reencode**，安装包命名为 `Reencode-WindowsX86-64`，只面向 Windows 10 / 11 x64；Windows 包由 GitHub Actions 的 Windows x64 runner 产出，和 Android APK 分开发布。', 'Windows 版随 1.6 一起构建，应用名为 **Reencode**，安装包命名为 `Reencode-WindowsX86-64`，只面向 Windows 10 / 11 x64；Windows 包由 GitHub Actions 的 Windows x64 runner 产出，和 Android APK 放在同一个 v1.6.0 发行版。', 1)
+          s = s.replace('Windows 构建当前不作为本次 Android 发行物的一部分。Windows 分支补上 `windows/` runner 并通过 `windows-latest` 构建后，才提供 `Reencode-WindowsX86-64`。', 'Windows 构建由 `.github/workflows/windows-x64.yml` 在 `windows-latest` 上生成 `windows/` runner，并打包 `Reencode-WindowsX86-64-1.6.0.zip`；本地不交叉编译 Windows 产物。', 1)
+          s = s.replace('- 插帧只保留可选独立包入口，核心 APK 不含插帧算法；桌面端不重复做插帧。', '- 插帧入口已删除，144fps 只补重复帧或丢帧；核心 APK 不含插帧算法，桌面端也不做插帧。', 1)
+          s = s.replace('# Reencode\n\nReencode is an offline', '# Reencode / Video Transcoder\n\nReencode is an offline', 1)
+          en_old = 'Reencode is an offline video converter. Bitrate, codec, container, resolution and audio sit on one workbench, which makes batch work on a phone practical. There are no ads, no analytics, no network access and no uploads.'
+          en_new = en_old + '''\n\n## About\n\nReencode / Video Transcoder is a free, open-source offline tool. Anyone may use, modify, redistribute and build it, provided the GPL-3.0 license is respected. Other people are free to make similar apps or fork this one; the point is not to ship one perfect binary, but to let people build their own working version. It is assembled from existing components, and the author is one of the people who could not find a usable transcoder and could not afford professional software. Testing has been limited to a small set of devices, so bugs are possible; reports are welcome. There is no plan to merge Reencode and Timbre into one large project. Both are small tools, updated irregularly; reaching 1.6 is simply the wish to make them a little more complete.'''
+          s = s.replace(en_old, en_new, 1)
+          s = s.replace('The Windows build is produced separately as **Reencode** with the installer name `Reencode-WindowsX86-64`, targeting Windows 10 / 11 x64 only. The Android release in this repository does not contain a Windows binary.', 'The Windows build uses the installer name `Reencode-WindowsX86-64` and targets Windows 10 / 11 x64 only. It is built by the `windows-x64` workflow and published in the same v1.6.0 release as the Android APK.', 1)
+          s = s.replace('The Windows build is not part of this Android release. A `Reencode-WindowsX86-64` build is offered only after the Windows branch gains a `windows/` runner and passes a `windows-latest` build.', 'The Windows build runs `.github/workflows/windows-x64.yml` on `windows-latest`, generating the `windows/` runner and packing `Reencode-WindowsX86-64-1.6.0.zip`. Windows binaries are not cross-compiled locally.', 1)
+          p.write_text(s)
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add README.md
+          git commit -m "Rewrite README intro and project notes" || exit 0
+          git push
