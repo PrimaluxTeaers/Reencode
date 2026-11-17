@@ -1,105 +1,41 @@
 # Changes
 
-## 1.5.0 重做 — 2026-11-17
+## 1.6.0 — 2026-11-17
 
 ### 中文
 
-版本号仍是 1.5.0，1.5 不是废弃版本号；上一轮 1.5 的 Release、标签和资产已从仓库撤下，等这一轮改完再重新构建、重新发布。1.0.0 等旧发布记录保持不动。
+1.6 是新基线。1.5 及更早的 Release、tag 和旧文档入口已清理，仓库只保留 1.6 叙事。
 
-- 更多设置改成逐项开关：HDR10 静态元数据、HDR10+ 动态元数据、杜比视界、全局元数据、章节、faststart 分开控制。
-- H.265 重编码会写入 HDR10 色彩标记、Mastering Display、MaxCLL / MaxFALL；HDR10+ 需要 `hdr10plus_tool`，这一版只做流复制保留，检测到 HDR10+ 源时拦截重编码；杜比视界同样只允许 remux。
-- 新增编码速度预设：快、均衡、慢、自定义；自定义可填 FFmpeg `-preset` 名。
-- 每个编码增加用途简称和详情页，讲实现原理、标准组织、发明背景、典型用途和最大支持。
-- AV1 接进首页：使用包内 `libaom-av1`，可输出 MP4 / MKV / WebM；12-bit 拦截，1080p 以上给出慢速提示。
-- 首页下方新增合并、分离、轻量音频入口：分离复制第一条视频和第一条音频，合并复制视频并可选 AAC 重编码音频，只要音频支持 M4A / MP3 / Opus / FLAC / WAV。
-- 插帧只保留独立包入口，不进入核心 APK；桌面端不重复适配。
-- Android 前台服务通知显示当前文件和整体进度；平板内容宽度限制为 840，底栏不再拉满全屏。
-- 应用名改为 `Reencode 64 位`，Windows 版为 `Reencode x86-64`。
-- README 改为中英上下对照，去掉独立的 `README.en.md` 跳转。
-
-### English
-
-The version stays 1.5.0. 1.5 is not a retired version number; the previous 1.5 releases, tags and assets were removed from the repository so this round can be rebuilt and republished. Older releases such as 1.0.0 remain untouched.
-
-- More settings is now a set of individual switches: HDR10 static metadata, HDR10+ dynamic metadata, Dolby Vision, global metadata, chapters and faststart.
-- H.265 re-encoding writes HDR10 colour tags, Mastering Display and MaxCLL / MaxFALL. HDR10+ needs `hdr10plus_tool`; this build only keeps it through stream copy and blocks re-encoding when an HDR10+ source is detected. Dolby Vision is remux-only for the same reason.
-- Added encoder speed presets: fast, balanced, slow and custom. Custom accepts any FFmpeg `-preset` name.
-- Each codec now has a short use case and a detail page covering the implementation principle, standards body, origin, typical use and maximum support.
-- AV1 is in the home row through the bundled `libaom-av1`, with MP4 / MKV / WebM output. 12-bit is blocked and anything above 1080p gets a slow-encode warning.
-- A separate merge, split and lightweight-audio entry sits below the home screen: split copies the first video and first audio stream; merge copies video and optionally re-encodes audio to AAC; audio-only exports M4A / MP3 / Opus / FLAC / WAV.
-- Frame interpolation keeps only an optional-package entry and stays out of the core APK. The desktop build does not repeat it.
-- An Android foreground-service notification shows the current file and overall progress. Tablet content is capped at 840 logical pixels and the bottom bar no longer stretches across the screen.
-- The app name is now `Reencode 64 位`; the Windows build is `Reencode x86-64`.
-- README is now a Chinese/English pair in one file, with no separate `README.en.md` jump.
-
----
-
-## 1.5.0 — 2026-11-16
-
-### 中文
-
-版本号从 1.0.0 跳到 1.5.0，versionCode 1500（base）；arm64-v8a 最终为 3500。Android 与 Windows 共用 1.5 版本线；本轮只发 Android arm64-v8a，Windows 由另一侧构建。
-
-- 首页编码区直接显示四种编码：H.264、H.265 / HEVC、VP9、MPEG-4。MPEG-4 补进首屏，不再是隐藏项。
-- 视频码率上限从原来的档位改为 1–100000 kbps，最高等效 100 Mbps；数字框精调、滑块粗调、kbps / Mbps 单位切换。
-- 分辨率增加 4K（2160p）、2K（1440p）、1.5K（1220p，实验）；保留原始尺寸档。1.5K 只改输出尺寸，不补细节。
-- 位深选择：保留、8-bit、10-bit、12-bit。H.265 / VP9 支持 10-bit，H.265 额外开放 12-bit 实验项；H.264 / MPEG-4 固定 8-bit；源文件没有的位深灰显。
-- 帧率增加 Passthrough / CFR 两种模式。24–60 连续可调；设置页打开“实验功能”后出现 90 / 120；144 连续点 120 四次并读完警告后解锁。CFR 只丢帧或补重复帧，不插帧。
-- 设置页新增“实验功能”面板，集中管理 90 / 120 / 144 和实验性帧率警告。
-- 参数预检、SAF 持久输出目录、双语界面、四编码首页测试同步补齐。
-- `flutter analyze lib test` 无问题，`flutter test` 15 项通过。
-
-已知边界不变：HDR10 静态元数据、HDR10+ 动态元数据、杜比视界不写入输出；没有开放 MediaCodec / GPU 编码；AV1 只有包内库，1.5 不接 UI；H.266 无编码器，不进入稳定版。
+- 版本号升到 1.6.0，versionCode 3600（arm64-v8a）；应用名保持 `Reencode 64 位`。
+- 设置页顶部新增本机硬件面板：处理器、核心数、总内存、MediaCodec 编码器、AV1 解码/编码能力；型号读不到时显示“可用，但型号未知”并警告。
+- GPU 信息放进下方展开栏；Android 的 GPU 相关路径按实验功能处理，不宣称纯 GPU 编码。
+- 新增 MediaCodec 硬件编码路径：H.264 用 `h264_mediacodec`，H.265 用 `hevc_mediacodec`。检测不到编码器、参数被拒绝或任务失败时回退 CPU。
+- AV1 只做软件编码 `libaom-av1`。骁龙 8 Elite Gen 6 / Elite Extreme Gen 6 与天玑 9600 Pro 官方都没有 AV1 硬件编码器，UI 明确写“AV1 可硬解、编码走软件”。
+- 新增实验性硬件解码开关，走 MediaCodec；探测不到对应解码能力时回退软件。
+- 分辨率新增自定义宽×高：宽高都要填、必须是偶数、单边 16–7680；像素密度不写进视频。
+- 后台驻留新增引导：后台锁定、无限制电池、回来确认；打开后申请 WakeLock。线程上限 1–8，1 线程和 6–8 线程有警告。
+- 内存上限按软限制落地：0 表示不主动限制，暂定 512–4096 MB，通过 FFmpeg muxing 队列和缓冲生效，不阻止系统杀进程。
+- 视频可以从系统相册或文件管理器添加。Android 13+ 走 Photo Picker，低版本回退一次性选择；选中文件复制到缓存，不持久化路径。音频只走文件管理器。
+- 分离支持在拆分前改视频和音频格式/编码/码率；合并页上下分别放视频和音频，可复制或重编码，支持无损复制和码率/音量选择。
+- HDR10、HDR10+、杜比视界统一归入“HDR 保留”说明；音频多轨在转码时保留，常用格式保留 AAC / MP4A、MP3、Opus、FLAC、WAV。
+- 完成条会消失，结果卡延迟收成摘要，点击立即收起或展开。
+- 测试增加到 28 项，覆盖自定义分辨率、奇数尺寸拒绝、硬件不可用回退和内存队列；arm64 APK 30,518,958 字节，SHA-256 `fe2364f727e774a8c1cc8daa5450ec62228cd3045b6246ff26c47a3c8104ec05`。
 
 ### English
 
-Version jumps from 1.0.0 to 1.5.0, versionCode 1500 (base); the arm64-v8a output is 3500. Android and Windows share the 1.5 line; this release ships Android arm64-v8a only, with Windows built separately.
+1.6 is the new baseline. Releases, tags and old documentation entry points from 1.5 and earlier were removed; the repository keeps the 1.6 narrative only.
 
-- The home codec row now shows all four codecs: H.264, H.265 / HEVC, VP9 and MPEG-4. MPEG-4 is visible instead of hidden.
-- Video bitrate is now 1–100000 kbps, up to the equivalent of 100 Mbps, with a numeric field, a slider and a kbps / Mbps unit switch.
-- Resolution adds 4K (2160p), 2K (1440p) and 1.5K (1220p, experimental), while keeping the source-size option. 1.5K only changes output dimensions.
-- Bit depth: preserve, 8-bit, 10-bit, 12-bit. H.265 / VP9 support 10-bit; H.265 adds a 12-bit experimental option; H.264 / MPEG-4 stay at 8-bit. Depths absent from the source are disabled.
-- Frame rate adds passthrough and CFR. 24–60 is continuous. 90 / 120 appear after enabling Experimental features in Settings. 144 unlocks after four taps on 120 and the warning. CFR only drops or repeats frames; it does not interpolate.
-- Settings gains an Experimental features panel for 90 / 120 / 144 and the high-frame-rate warning.
-- Preflight, persistent SAF output, bilingual UI and four-codec home tests are updated.
-- `flutter analyze lib test` is clean; `flutter test` passes 15 tests.
-
-Known limits are unchanged: HDR10 static metadata, HDR10+ dynamic metadata and Dolby Vision are not written to the output; MediaCodec / GPU encoding is not exposed; AV1 is present as a library but not in the 1.5 UI; H.266 has no encoder and stays out of the stable release.
-
----
-
-## 1.0.0 — 2026-11-15
-
-### 中文
-
-第一个版本。
-
-- 三种模式：只换容器、换编码、压码率。可以单独改一项，也可以同时改编码和容器。
-- 容器 MP4 / MKV / MOV / WebM，视频编码 H.264 / H.265 / VP9 / MPEG-4，音频 AAC / Opus / MP3 / 原样复制。
-- 目标码率、分辨率、帧率、音频码率可调。视频码率最低 1 kbps，64 kbps 以下会提示实验性低码率档；音频最低 8 kbps。只换容器走流复制，不重新编码。
-- 多文件队列、探测、预检、进度、取消、失败重试。
-- Android SAF 持久输出目录。授权后结果直接写入，结果卡只保留“已完成”；未授权时保留分享。
-- 中文 / English 运行时切换，主题和主题色可调。
-- 应用内许可页、完整 GPL-3.0 文本、第三方组件清单和隐私说明。
-- 首个发行版只提供 arm64-v8a APK，最低 Android 7.0。
-
-已知边界：字幕、附件、多视频轨、HDR 元数据、杜比视界不保留；没有开放 MediaCodec 硬件编码。
-
-### English
-
-First release.
-
-- Three modes: remux, re-encode, compress. Use one at a time, or combine a codec change with a container change.
-- Containers: MP4 / MKV / MOV / WebM. Video: H.264 / H.265 / VP9 / MPEG-4. Audio: AAC / Opus / MP3 / stream copy.
-- Adjustable target bitrate, resolution, frame rate and audio bitrate. Video bitrate goes down to 1 kbps, with a warning below 64 kbps; audio down to 8 kbps. Remux copies streams without re-encoding.
-- Multi-file queue, probing, preflight checks, progress, cancellation and retry after failure.
-- Persistent Android SAF output folder. Once granted, results are written there and the card shows only “Done”; without a folder, sharing stays available.
-- Chinese / English runtime switch, theme and accent colour.
-- In-app licenses page, full GPL-3.0 text, third-party inventory and privacy note.
-- First release is arm64-v8a only, minimum Android 7.0.
-
-Known limits: subtitle, attachment and multiple video tracks are not preserved; HDR metadata and Dolby Vision are not preserved; MediaCodec hardware encoding is not exposed.
-
----
-
-Build: Flutter 3.50.0 · Dart 3.14 · FFmpegKit Flutter 4.6.8 (Full GPL) · FFmpeg 8.1.2.
+- Version is 1.6.0, versionCode 3600 for arm64-v8a; the app name stays `Reencode 64-bit`.
+- Settings now starts with a device panel: processor, cores, total RAM, MediaCodec encoders and AV1 decode/encode capability. An unreadable model is shown as "available, model unknown" with a warning.
+- GPU information sits in a collapsed section below. Android GPU-related paths are experimental; the app does not claim pure GPU encoding.
+- Added MediaCodec encoding: `h264_mediacodec` for H.264 and `hevc_mediacodec` for H.265. When no encoder is found, parameters are rejected or the job fails, the job returns to the CPU.
+- AV1 is software-only through `libaom-av1`. The official Snapdragon 8 Elite Gen 6 / Elite Extreme Gen 6 and Dimensity 9600 Pro specifications have no AV1 hardware encoder, so the UI states "AV1 hardware decode, software encode".
+- Added an experimental hardware-decode switch through MediaCodec; when the matching decoder is unavailable, it falls back to software.
+- Added custom width × height: both sides required, even, 16–7680 per side. Pixel density is not written into the video.
+- Background mode now guides through the system background lock and unrestricted battery, then asks you to confirm; WakeLock is requested only while enabled. Thread cap is 1–8, with warnings at one thread and at 6–8.
+- The memory budget is a soft cap: 0 means no app-side limit, with a provisional 512–4096 MB range applied through FFmpeg muxing queues and buffers. It does not stop Android from killing the process.
+- Video can come from the system gallery or the file manager. Android 13+ uses the Photo Picker, older versions use a one-shot picker; the selected file is copied into the cache without persisting the path. Audio uses the file manager only.
+- Split can change video and audio format, codec and bitrate before splitting. Merge puts video on top and audio below, supports copy or re-encode, lossless copy and bitrate / volume control.
+- HDR10, HDR10+ and Dolby Vision are grouped under "HDR preservation". Multiple audio tracks are preserved when re-encoding; common formats keep AAC / MP4A, MP3, Opus, FLAC and WAV.
+- The completion bar disappears; the result card collapses to a summary after a delay and expands or collapses immediately when tapped.
+- Tests grew to 28, covering custom size, odd-size rejection, hardware fallback and the memory queue. The arm64 APK is 30,518,958 bytes, SHA-256 `fe2364f727e774a8c1cc8daa5450ec62228cd3045b6246ff26c47a3c8104ec05`.
