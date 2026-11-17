@@ -13,15 +13,20 @@ jobs:
   import:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Download source archive
-        run: curl -fsSL "https://aka.doubaocdn.com/s/vdHb2jyI9r" -o source.zip
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Download 1.6 source archive
+        run: curl -fsSL "https://aka.doubaocdn.com/s/yr2Q29jQ7L" -o /tmp/source.zip
       - name: Extract into repository
-        run: unzip -oq source.zip -d .
-      - name: Commit source
+        run: unzip -oq /tmp/source.zip -d .
+      - name: Commit 1.6 source
+        shell: bash
         run: |
-          git config user.name "Reencode Bot"
-          git config user.email "reencode@users.noreply.github.com"
+          set -euo pipefail
+          git rm -q README.en.md source.zip .github/workflows/add-icons.yml .github/workflows/import-source.yml .github/workflows/release-1.5.yml .github/workflows/sync-source-1.0.0.yml .github/workflows/ui-motion-test.yml .github/workflows/update-video-icon.yml || true
+          git config user.name "PrimaluxTeaers"
+          git config user.email "teacers@users.noreply.github.com"
           git add -A
-          git commit -m "Import Reencode 1.0.0 source" || echo "nothing to commit"
-          git push
+          if git diff --cached --quiet; then echo "nothing to commit"; else git commit -m "Reencode 1.6.0: source, Windows workflow, icons"; git push origin HEAD:main; fi
