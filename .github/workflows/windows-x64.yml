@@ -1,0 +1,104 @@
+name: Windows x64
+
+# Builds the Windows x64 package on a real Windows runner. The `windows/`
+# project files are generated here because Flutter can only scaffold them with
+# the platform toolchain present, and the FFmpeg sidecar is fetched at build
+# time instead of being committed to the repository.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - windows-port
+      - main
+    paths:
+      - "lib/**"
+      - "assets/icons/**"
+      - ".github/workflows/windows-x64.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show toolchain
+        shell: bash
+        run: |
+          flutter --version
+          flutter config --enable-windows-desktop
+
+      - name: Generate Windows runner
+        shell: bash
+        run: flutter create --platforms=windows --project-name reencode .
+
+      - name: Apply the Reencode icon
+        shell: pwsh
+        run: |
+          Copy-Item "assets/icons/reencode.ico" "windows/runner/resources/app_icon.ico" -Force
+          Get-Item "windows/runner/resources/app_icon.ico" | Select-Object Name, Length
+
+      - name: Resolve packages
+        shell: bash
+        run: flutter pub get
+
+      - name: Fetch FFmpeg x64 GPL build
+        shell: pwsh
+        run: |
+          $Url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          Invoke-WebRequest -Uri $Url -OutFile ffmpeg.zip
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffbuild -Force
+          $root = Get-ChildItem ffbuild -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path windows/ffmpeg | Out-Null
+          Copy-Item "$($root.FullName)\bin\ffmpeg.exe" windows/ffmpeg/
+          Copy-Item "$($root.FullName)\bin\ffprobe.exe" windows/ffmpeg/
+
+      - name: Build release
+        shell: bash
+        run: flutter build windows --release
+
+      - name: Bundle FFmpeg beside the executable
+        shell: pwsh
+        run: |
+          $out = "build/windows/x64/runner/Release"
+          New-Item -ItemType Directory -Force -Path "$out/ffmpeg" | Out-Null
+          Copy-Item "windows/ffmpeg/ffmpeg.exe" "$out/ffmpeg/"
+          Copy-Item "windows/ffmpeg/ffprobe.exe" "$out/ffmpeg/"
+          Get-ChildItem $out | Select-Object Name, Length
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "Reencode-WindowsX86-64-1.6.0.zip" -Force
+          Get-Item "Reencode-WindowsX86-64-1.6.0.zip" | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Reencode-WindowsX86-64-1.6.0
+          path: Reencode-WindowsX86-64-1.6.0.zip
+          retention-days: 30
+
+      - name: Publish Windows release
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/windows-port'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: windows-v1.6.0
+          name: Reencode 1.6.0 — Windows x86-64
+          body: |
+            Windows x86-64 build for Reencode 1.6.0.
+
+            This package is the full Windows runner directory with ffmpeg.exe and ffprobe.exe bundled under `ffmpeg/`. It targets Windows 10/11 x64 only; Win7/8/8.1 are not included. Hardware encoding uses NVENC / AMF when detected, and falls back to the CPU if the encoder rejects the job. AV1 export is software-only and marked experimental.
+          files: Reencode-WindowsX86-64-1.6.0.zip
+          fail_on_unmatched_files: true
+          prerelease: false
+          make_latest: false
