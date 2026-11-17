@@ -1,8 +1,12 @@
-# Reencode
+# Reencode / 视频转码
 
 Reencode 是一个离线视频转码工具。它把码率、编码、容器、分辨率和音频放在同一张工作台上，适合批量处理手机里的视频。没有广告，没有统计，不联网，也不上传文件。
 
-Android 版只出 arm64-v8a，应用名显示为 **Reencode 64 位**，包名 `com.teacers.reencode`。Windows 版随 1.6 一起构建，应用名为 **Reencode**，安装包命名为 `Reencode-WindowsX86-64`，只面向 Windows 10 / 11 x64；Windows 包由 GitHub Actions 的 Windows x64 runner 产出，和 Android APK 分开发布。
+## 关于这个项目
+
+Reencode / 视频转码 是免费开源的离线工具，任何人都可以免费使用、修改、分发和自行构建，只要遵守 GPL-3.0。也完全允许其他人基于它做同类软件或另起分支；比起复制一个成品，更希望这套代码能让人自己搭出能用的版本。项目由多个现成组件拼装而成，作者本人也是被“找不到能用的转码工具、专业软件又太贵”困住的人。测试设备有限，遇到 bug 请见谅，也欢迎提交问题。没有把 Reencode 和 Timbre 合并成一个大型项目的打算，两个都只是小工具；更新完全随缘，能走到 1.6 靠的是想把它们做完整一点的心。
+
+Android 版只出 arm64-v8a，应用名显示为 **Reencode 64 位**，包名 `com.teacers.reencode`。Windows 版随 1.6 一起构建，应用名为 **Reencode**，安装包命名为 `Reencode-WindowsX86-64`，只面向 Windows 10 / 11 x64；Windows 包由 GitHub Actions 的 Windows x64 runner 产出，和 Android APK 放在同一个 v1.6.0 发行版。
 
 1.6 是当前基线。1.5 及更早的 Release、tag 和旧文档入口已经清理，旧版本不作为可用版本保留。
 
@@ -78,7 +82,7 @@ flutter build apk --release --target-platform android-arm64 --split-per-abi
 
 FFmpegKit Flutter 包放在 `third_party/ffmpeg_kit_flutter_new`。这是上游 4.6.8 的副本，Dart 接口和原生代码没改，只改了 `android/build.gradle` 的 AGP 版本和仓库地址，让它在当前 Flutter / Gradle 组合里能构建。升级 Flutter、AGP 或 Gradle 前先检查这个文件。
 
-Windows 构建当前不作为本次 Android 发行物的一部分。Windows 分支补上 `windows/` runner 并通过 `windows-latest` 构建后，才提供 `Reencode-WindowsX86-64`。
+Windows 构建由 `.github/workflows/windows-x64.yml` 在 `windows-latest` 上生成 `windows/` runner，并打包 `Reencode-WindowsX86-64-1.6.0.zip`；本地不交叉编译 Windows 产物。
 
 ## 许可
 
@@ -99,7 +103,7 @@ Release APK 不申请 `INTERNET` 权限。没有广告 SDK，没有统计 SDK，
 - 10-bit / 12-bit 只表示像素位深，不等于 HDR。HDR10+ 动态元数据不注入，杜比视界不重编码，二者只能流复制保留。
 - MediaCodec 硬件编码和硬件解码是实验路径。具体机型可能拒绝 10-bit、拒绝某些分辨率或直接失败，失败后回退 CPU。没有“纯 GPU 编码”或 GPU 滤镜。
 - AV1 只有 `libaom-av1` 软件编码，速度很慢，1080p 比较现实，12-bit 会拦截；AV1 硬件解码取决于机型。H.266 / VVC 没有 `libvvenc`，不能编码，不进入稳定版。
-- 插帧只保留可选独立包入口，核心 APK 不含插帧算法；桌面端不重复做插帧。
+- 插帧入口已删除，144fps 只补重复帧或丢帧；核心 APK 不含插帧算法，桌面端也不做插帧。
 - 大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。
 - 预检只拦明确不兼容的组合，最终能不能封装仍以 FFmpeg 的结果为准。
 
@@ -114,11 +118,15 @@ flutter test
 
 ---
 
-# Reencode
+# Reencode / Video Transcoder
 
 Reencode is an offline video converter. Bitrate, codec, container, resolution and audio sit on one workbench, which makes batch work on a phone practical. There are no ads, no analytics, no network access and no uploads.
 
-The Android build ships arm64-v8a only, shows **Reencode 64-bit** as its name and uses `com.teacers.reencode`. The Windows build is produced separately as **Reencode** with the installer name `Reencode-WindowsX86-64`, targeting Windows 10 / 11 x64 only. The Android release in this repository does not contain a Windows binary.
+## About
+
+Reencode / Video Transcoder is a free, open-source offline tool. Anyone may use, modify, redistribute and build it, provided the GPL-3.0 license is respected. Other people are free to make similar apps or fork this one; the point is not to ship one perfect binary, but to let people build their own working version. It is assembled from existing components, and the author is one of the people who could not find a usable transcoder and could not afford professional software. Testing has been limited to a small set of devices, so bugs are possible; reports are welcome. There is no plan to merge Reencode and Timbre into one large project. Both are small tools, updated irregularly; reaching 1.6 is simply the wish to make them a little more complete.
+
+The Android build ships arm64-v8a only, shows **Reencode 64-bit** as its name and uses `com.teacers.reencode`. The Windows build uses the installer name `Reencode-WindowsX86-64` and targets Windows 10 / 11 x64 only. It is built by the `windows-x64` workflow and published in the same v1.6.0 release as the Android APK.
 
 1.6 is the current baseline. Releases, tags and old documentation entry points from 1.5 and earlier were removed; older builds are not kept as usable versions.
 
@@ -194,7 +202,7 @@ flutter build apk --release --target-platform android-arm64 --split-per-abi
 
 The FFmpegKit Flutter package lives in `third_party/ffmpeg_kit_flutter_new`. It is a copy of upstream 4.6.8 with no changes to the Dart API or native code. Only `android/build.gradle` was changed: the AGP version and repository list, so it builds with the current Flutter / Gradle combination. Check that file before upgrading Flutter, AGP or Gradle.
 
-The Windows build is not part of this Android release. A `Reencode-WindowsX86-64` build is offered only after the Windows branch gains a `windows/` runner and passes a `windows-latest` build.
+The Windows build runs `.github/workflows/windows-x64.yml` on `windows-latest`, generating the `windows/` runner and packing `Reencode-WindowsX86-64-1.6.0.zip`. Windows binaries are not cross-compiled locally.
 
 ## License
 
