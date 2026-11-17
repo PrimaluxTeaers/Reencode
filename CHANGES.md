@@ -1,5 +1,39 @@
 # Changes
 
+## 1.5.0 重做 — 2026-11-17
+
+### 中文
+
+版本号仍是 1.5.0，1.5 不是废弃版本号；上一轮 1.5 的 Release、标签和资产已从仓库撤下，等这一轮改完再重新构建、重新发布。1.0.0 等旧发布记录保持不动。
+
+- 更多设置改成逐项开关：HDR10 静态元数据、HDR10+ 动态元数据、杜比视界、全局元数据、章节、faststart 分开控制。
+- H.265 重编码会写入 HDR10 色彩标记、Mastering Display、MaxCLL / MaxFALL；HDR10+ 需要 `hdr10plus_tool`，这一版只做流复制保留，检测到 HDR10+ 源时拦截重编码；杜比视界同样只允许 remux。
+- 新增编码速度预设：快、均衡、慢、自定义；自定义可填 FFmpeg `-preset` 名。
+- 每个编码增加用途简称和详情页，讲实现原理、标准组织、发明背景、典型用途和最大支持。
+- AV1 接进首页：使用包内 `libaom-av1`，可输出 MP4 / MKV / WebM；12-bit 拦截，1080p 以上给出慢速提示。
+- 首页下方新增合并、分离、轻量音频入口：分离复制第一条视频和第一条音频，合并复制视频并可选 AAC 重编码音频，只要音频支持 M4A / MP3 / Opus / FLAC / WAV。
+- 插帧只保留独立包入口，不进入核心 APK；桌面端不重复适配。
+- Android 前台服务通知显示当前文件和整体进度；平板内容宽度限制为 840，底栏不再拉满全屏。
+- 应用名改为 `Reencode 64 位`，Windows 版为 `Reencode x86-64`。
+- README 改为中英上下对照，去掉独立的 `README.en.md` 跳转。
+
+### English
+
+The version stays 1.5.0. 1.5 is not a retired version number; the previous 1.5 releases, tags and assets were removed from the repository so this round can be rebuilt and republished. Older releases such as 1.0.0 remain untouched.
+
+- More settings is now a set of individual switches: HDR10 static metadata, HDR10+ dynamic metadata, Dolby Vision, global metadata, chapters and faststart.
+- H.265 re-encoding writes HDR10 colour tags, Mastering Display and MaxCLL / MaxFALL. HDR10+ needs `hdr10plus_tool`; this build only keeps it through stream copy and blocks re-encoding when an HDR10+ source is detected. Dolby Vision is remux-only for the same reason.
+- Added encoder speed presets: fast, balanced, slow and custom. Custom accepts any FFmpeg `-preset` name.
+- Each codec now has a short use case and a detail page covering the implementation principle, standards body, origin, typical use and maximum support.
+- AV1 is in the home row through the bundled `libaom-av1`, with MP4 / MKV / WebM output. 12-bit is blocked and anything above 1080p gets a slow-encode warning.
+- A separate merge, split and lightweight-audio entry sits below the home screen: split copies the first video and first audio stream; merge copies video and optionally re-encodes audio to AAC; audio-only exports M4A / MP3 / Opus / FLAC / WAV.
+- Frame interpolation keeps only an optional-package entry and stays out of the core APK. The desktop build does not repeat it.
+- An Android foreground-service notification shows the current file and overall progress. Tablet content is capped at 840 logical pixels and the bottom bar no longer stretches across the screen.
+- The app name is now `Reencode 64 位`; the Windows build is `Reencode x86-64`.
+- README is now a Chinese/English pair in one file, with no separate `README.en.md` jump.
+
+---
+
 ## 1.5.0 — 2026-11-16
 
 ### 中文
