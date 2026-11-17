@@ -1,6 +1,9 @@
 name: sync-docs
 
 on:
+  push:
+    paths:
+      - '.github/workflows/sync-docs.yml'
   workflow_dispatch:
 
 permissions:
