@@ -5,7 +5,7 @@ import "package:reencode/main.dart";
 import "package:reencode/page_route.dart";
 
 void main() {
-  testWidgets("home shows all four codecs and a settings entry", (
+  testWidgets("home shows all five codecs and a settings entry", (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const ReencodeApp());
@@ -15,6 +15,7 @@ void main() {
     expect(find.text("H.264"), findsWidgets);
     expect(find.text("H.265"), findsWidgets);
     expect(find.text("VP9"), findsWidgets);
+    expect(find.textContaining("AV1"), findsWidgets);
     expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 

@@ -57,8 +57,8 @@ class LicensesPage extends StatelessWidget {
             context,
             title: S.t("Known limits", "已知边界"),
             body: S.t(
-              "Version 1.5 processes the first video stream and all audio streams. Chapters and global metadata are copied when the target container supports them; subtitle and attachment streams are not copied. Multiple video tracks, HDR metadata and Dolby Vision are not preserved. AV1 is present but not exposed; H.266 has no encoder in this build. The Full GPL build uses software encoding; MediaCodec hardware acceleration is not exposed in this release. Very large files need roughly twice their size in free space while the temporary output exists.",
-              "1.5 处理第一条视频流和全部音频流。目标容器支持时，章节和全局元数据会复制；字幕和附件流不会复制。多视频轨、HDR 元数据和杜比视界不会保留；AV1 未接 UI，H.266 没有编码器。Full GPL 包走软件编码；这一版没有开放 MediaCodec 硬件加速。大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。",
+              "Version 1.5 processes the first video stream and all audio streams. Chapters and global metadata are copied when the target container supports them; subtitle and attachment streams are not copied. Multiple video tracks are not copied. HDR10 static metadata is written for H.265; AV1 writes the colour tags only. HDR10+ dynamic metadata and Dolby Vision are preserved only by Remux. AV1 is a real libaom encoder here, 12-bit is blocked and software encoding is very slow. H.266 has no encoder in this build. The Full GPL build uses software encoding; MediaCodec hardware acceleration is not exposed in this release. Very large files need roughly twice their size in free space while the temporary output exists.",
+              "1.5 处理第一条视频流和全部音频流。目标容器支持时，章节和全局元数据会复制；字幕和附件流不会复制，多视频轨也不会复制。H.265 会写 HDR10 静态元数据；AV1 只写色彩标记。HDR10+ 动态元数据和杜比视界只有“只换容器”能保留。AV1 这版用 libaom 真正接入，12-bit 会拦截，软件编码非常慢。H.266 没有编码器。Full GPL 包走软件编码；这一版没有开放 MediaCodec 硬件加速。大文件在临时输出存在期间，大约需要相当于原文件两倍的剩余空间。",
             ),
           ),
           const SizedBox(height: 14),
@@ -66,8 +66,8 @@ class LicensesPage extends StatelessWidget {
             context,
             title: S.t("Source and license text", "源码与许可证全文"),
             body: S.t(
-              "The repository ships LICENSE (GPL-3.0), THIRD_PARTY.md, README.md, README.en.md and CHANGES.md. The complete GPL text is also bundled in the app.",
-              "仓库里有 LICENSE（GPL-3.0）、THIRD_PARTY.md、README.md、README.en.md 和 CHANGES.md。GPL 全文也随应用打包。",
+              "The repository ships LICENSE (GPL-3.0), THIRD_PARTY.md, README.md and CHANGES.md. The complete GPL text is also bundled in the app.",
+              "仓库里有 LICENSE（GPL-3.0）、THIRD_PARTY.md、README.md 和 CHANGES.md。GPL 全文也随应用打包。",
             ),
           ),
           const SizedBox(height: 8),

@@ -17,8 +17,9 @@ flutter:
         pluginClass: FFmpegKitFlutterPlugin
       macos:
         pluginClass: FFmpegKitFlutterPlugin
-      windows:
-        pluginClass: FFmpegKitFlutterPlugin
+# Windows is intentionally not registered here: the 1.6 Windows runner uses
+# ffmpeg.exe/ffprobe.exe as child processes, so the Dart API stays available
+# without a native plugin.
       linux:
         pluginClass: FFmpegKitFlutterPlugin
 

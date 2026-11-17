@@ -10,6 +10,8 @@ import "package:ffmpeg_kit_flutter_new/return_code.dart";
 import "package:ffmpeg_kit_flutter_new/statistics.dart";
 
 import "command_builder.dart";
+import "engine_windows.dart";
+import "hardware_profile.dart";
 import "models.dart";
 
 class ProbeException implements Exception {
@@ -53,7 +55,10 @@ class ConversionResult {
 }
 
 class MediaProbe {
-  static Future<MediaSummary> read(String path) async {
+  static Future<MediaSummary> read(
+    String path, {
+    bool requireVideo = true,
+  }) async {
     int fallbackSize = 0;
     try {
       fallbackSize = await File(path).length();
@@ -75,8 +80,11 @@ class MediaProbe {
         path,
         fallbackSize: fallbackSize,
       );
-      if (!summary.hasVideo) {
+      if (requireVideo && !summary.hasVideo) {
         throw ProbeException("No video stream in this file.");
+      }
+      if (!requireVideo && !summary.hasVideo && !summary.hasAudio) {
+        throw ProbeException("No audio or video stream in this file.");
       }
       return summary;
     } on ProbeException {
@@ -88,16 +96,43 @@ class MediaProbe {
 }
 
 class ConversionRunner {
+  final WindowsConversionRunner _windows = WindowsConversionRunner();
   FFmpegSession? _session;
   bool _cancelRequested = false;
 
-  bool get isRunning => _session != null;
+  bool get isRunning =>
+      Platform.isWindows ? _windows.isRunning : _session != null;
 
   Future<ConversionResult> run({
     required MediaSummary media,
     required ConversionRecipe recipe,
     required String outputPath,
     required void Function(double progress) onProgress,
+  }) async {
+    if (Platform.isWindows) {
+      return _windows.run(
+        media: media,
+        recipe: recipe,
+        outputPath: outputPath,
+        onProgress: onProgress,
+      );
+    }
+    final ConversionResult result = await _runOnce(
+      media: media,
+      recipe: recipe,
+      outputPath: outputPath,
+      onProgress: onProgress,
+      fallbackAllowed: true,
+    );
+    return result;
+  }
+
+  Future<ConversionResult> _runOnce({
+    required MediaSummary media,
+    required ConversionRecipe recipe,
+    required String outputPath,
+    required void Function(double progress) onProgress,
+    required bool fallbackAllowed,
   }) async {
     _cancelRequested = false;
     final List<String> args = CommandBuilder.build(
@@ -137,10 +172,42 @@ class ConversionRunner {
       if (id != null) FFmpegKit.cancel(id);
     }
 
-    return completer.future;
+    final ConversionResult result = await completer.future;
+    if (fallbackAllowed &&
+        !result.success &&
+        !result.canceled &&
+        recipe.hardwareAcceleration != HardwareAcceleration.software &&
+        (recipe.videoCodec == VideoCodec.h264 ||
+            recipe.videoCodec == VideoCodec.h265)) {
+      try {
+        final File output = File(outputPath);
+        if (output.existsSync()) output.deleteSync();
+      } catch (_) {}
+      final ConversionResult retry = await _runOnce(
+        media: media,
+        recipe: recipe.copyWith(
+          hardwareAcceleration: HardwareAcceleration.software,
+          hardwareDecode: false,
+        ),
+        outputPath: outputPath,
+        onProgress: onProgress,
+        fallbackAllowed: false,
+      );
+      if (retry.success) {
+        return ConversionResult(
+          retry.returnCode,
+          "Hardware encoder failed; retried on CPU.\n${retry.log ?? ""}",
+        );
+      }
+    }
+    return result;
   }
 
   void cancel() {
+    if (Platform.isWindows) {
+      _windows.cancel();
+      return;
+    }
     _cancelRequested = true;
     final int? id = _session?.getSessionId();
     if (id != null) {

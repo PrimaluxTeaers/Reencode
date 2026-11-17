@@ -1,14 +1,18 @@
+import "dart:io";
+
 import "package:material_ui/material_ui.dart";
 import "package:flutter/services.dart";
 
 import "dialogs.dart";
+import "hardware_profile.dart";
 import "l10n.dart";
+import "models.dart";
 import "licenses_page.dart";
 import "output_store.dart";
 import "page_route.dart";
 import "theme.dart";
 
-const String kAppVersion = "1.5.0";
+const String kAppVersion = "1.6.0";
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -20,6 +24,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   OutputTarget? _target;
   bool _busy = false;
+  HardwareProfile? _hardware;
 
   @override
   void initState() {
@@ -27,6 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
     S.revision.addListener(_onPreferenceChanged);
     AppPreferences.revision.addListener(_onPreferenceChanged);
     _loadTarget();
+    _loadHardware();
   }
 
   @override
@@ -38,6 +44,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _onPreferenceChanged() {
     if (mounted) setState(() {});
+  }
+
+  Future<void> _loadHardware() async {
+    final HardwareProfile profile = await HardwareProfile.load(force: true);
+    if (mounted) setState(() => _hardware = profile);
   }
 
   Future<void> _loadTarget() async {
@@ -117,6 +128,14 @@ class _SettingsPageState extends State<SettingsPage> {
               delegate: SliverChildListDelegate([
                 _languagePanel(scheme),
                 const SizedBox(height: 16),
+                _hardwarePanel(scheme),
+                const SizedBox(height: 16),
+                _performancePanel(scheme),
+                const SizedBox(height: 16),
+                if (Platform.isWindows) ...<Widget>[
+                  _shortcutsPanel(scheme),
+                  const SizedBox(height: 16),
+                ],
                 _folderPanel(scheme),
                 const SizedBox(height: 16),
                 _appearancePanel(scheme),
@@ -171,6 +190,362 @@ class _SettingsPageState extends State<SettingsPage> {
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hardwarePanel(ColorScheme scheme) {
+    final HardwareProfile? profile = _hardware;
+    final bool windows = profile?.isWindows ?? Platform.isWindows;
+    final bool unknown =
+        profile == null ||
+        profile.error.isNotEmpty ||
+        (!windows && !profile.socKnown && profile.isAndroid);
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _panelTitle(
+                  scheme,
+                  Icons.memory_rounded,
+                  S.t("This device", "本机硬件"),
+                ),
+              ),
+              IconButton(
+                tooltip: S.t("Read again", "重新识别"),
+                onPressed: _loadHardware,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (profile == null)
+            Text(
+              S.t("Reading the chip and codec list…", "正在读取芯片和编码器列表…"),
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else ...[
+            _factRow(
+              scheme,
+              S.t("Processor", "处理器"),
+              windows ? profile.cpuLabel : profile.socLabel,
+              warning: unknown,
+            ),
+            _factRow(
+              scheme,
+              S.t("Cores / RAM", "核心 / 内存"),
+              windows
+                  ? "${profile.physicalCores} cores · ${profile.logicalCores} threads · ${profile.totalRamMb} MB"
+                  : "${profile.cores} cores · ${profile.totalRamMb} MB",
+              warning: profile.cores <= 0 || profile.totalRamMb <= 0,
+            ),
+            _factRow(
+              scheme,
+              S.t("AV1", "AV1"),
+              windows
+                  ? S.t("Software only (libaom)", "仅软件（libaom）")
+                  : profile.av1Text,
+              warning: !profile.av1Decode,
+            ),
+            _factRow(
+              scheme,
+              windows
+                  ? S.t("GPU encoders", "GPU 编码器")
+                  : S.t("MediaCodec encoders", "MediaCodec 编码器"),
+              windows
+                  ? "NVENC ${profile.nvencAvailable ? "✓" : "—"} · AMF ${profile.amfAvailable ? "✓" : "—"}"
+                  : profile.hasHardwareEncoder
+                  ? "H.264 ${profile.avcEncode ? "✓" : "—"} · H.265 ${profile.hevcEncode ? "✓" : "—"}"
+                  : S.t("None detected", "未检测到"),
+              warning: !profile.hasHardwareEncoder,
+            ),
+            if (profile.lowRam)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  S.t(
+                    "The system reports a low-RAM device. Keep exports short and leave the default memory budget alone.",
+                    "系统报告这是低内存设备。导出短一点，内存上限保持默认。",
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.error),
+                ),
+              ),
+            if (unknown)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  S.t(
+                    "The processor name could not be read. Hardware acceleration stays available but is treated as unverified; check one short export before a long batch.",
+                    "读不到具体处理器型号。硬件加速仍可用，但按未验证处理；长批次前先跑一条短视频确认。",
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.error),
+                ),
+              ),
+            const SizedBox(height: 8),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text(
+                S.t("GPU and acceleration", "GPU 与加速"),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              subtitle: Text(
+                S.t(
+                  windows
+                      ? "NVENC / AMF use the GPU's fixed-function encoder. Intel Quick Sync is detected but kept off in this build."
+                      : "Experimental on Android: MediaCodec is a dedicated video unit, not the GPU shader cores.",
+                  windows
+                      ? "NVENC / AMF 使用显卡的固定功能编码单元。Intel Quick Sync 会显示，但这一版不启用。"
+                      : "安卓端为实验功能：MediaCodec 是专用视频单元，不是 GPU 着色器。",
+                ),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+              children: <Widget>[
+                _factRow(
+                  scheme,
+                  "GPU",
+                  profile.gpuLabel,
+                  warning: !profile.gpuKnown,
+                ),
+                Text(
+                  S.t(
+                    windows
+                        ? "Hardware encoding is limited to H.264 / H.265. AV1 export stays on libaom and is marked experimental."
+                        : "Hardware encoding is used for H.264 / H.265 only. AV1 has hardware decode on current flagships but no hardware encoder, so AV1 export stays on libaom and is slow.",
+                    windows ? "硬件编码只覆盖 H.264 / H.265。AV1 导出仍走 libaom，标为实验功能。" : "硬件编码只用于 H.264 / H.265。当前旗舰的 AV1 有硬件解码但没有硬件编码器，所以 AV1 导出仍走 libaom，速度慢。",
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+            if (profile.error.isNotEmpty)
+              Text(
+                profile.error,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.error),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _factRow(
+    ColorScheme scheme,
+    String name,
+    String value, {
+    bool warning = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(
+              name,
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: warning ? scheme.error : scheme.onSurface),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _performancePanel(ColorScheme scheme) {
+    final int threads = AppPreferences.threadLimit;
+    final int memory = AppPreferences.memoryBudgetMb;
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelTitle(
+            scheme,
+            Icons.speed_rounded,
+            S.t("Background and limits", "后台与上限"),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            Platform.isWindows
+                ? S.t(
+                    "Windows keeps the window and the conversion process together. Closing the window stops the job; there is no background service.",
+                    "Windows 版窗口和转换进程绑定。关掉窗口就会停止任务，没有后台服务。",
+                  )
+                : S.t(
+                    "Android only. Lock the app in Recents, allow unrestricted battery use, then come back and confirm here. Turning this off returns the app to normal foreground limits.",
+                    "仅安卓。把应用在最近任务里锁定、电池设为无限制，再回来这里确认启用。关掉后恢复普通前台限制。",
+                  ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          if (!Platform.isWindows)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(S.t("Keep working in background", "允许后台驻留")),
+              subtitle: Text(
+                S.t(
+                  "Needs the system background lock and unrestricted battery. The app still shows a foreground notification while a job runs.",
+                  "需要系统后台锁定和无限制电池。任务运行时仍会显示前台通知。",
+                ),
+              ),
+              value: AppPreferences.backgroundMode,
+              onChanged: (bool value) {
+                HapticFeedback.selectionClick();
+                AppPreferences.setBackgroundMode(value);
+              },
+            ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Platform.isWindows
+                ? Text(S.t("Use GPU encoder when available", "有 GPU 编码器时使用"))
+                : Text(S.t("Use MediaCodec when available", "有硬件编码器时使用")),
+            subtitle: Text(
+              S.t(
+                Platform.isWindows
+                    ? "NVENC / AMF, H.264 / H.265 only. A failed hardware run retries on the CPU."
+                    : "Experimental on Android. H.264 / H.265 only; AV1 stays software.",
+                Platform.isWindows
+                    ? "NVENC / AMF，只对 H.264 / H.265 生效。硬件运行失败会自动回到 CPU 重试。"
+                    : "安卓端实验功能。只对 H.264 / H.265 生效；AV1 仍走软件。",
+              ),
+            ),
+            value: AppPreferences.hardwareEncoding,
+            onChanged: (bool value) {
+              HapticFeedback.selectionClick();
+              AppPreferences.setHardwareEncoding(value);
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  S.t("Thread cap", "线程上限"),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                threads == 0 ? S.t("Auto", "自动") : "$threads",
+                style: Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(color: scheme.primary),
+              ),
+            ],
+          ),
+          Slider(
+            value: threads.toDouble(),
+            min: 0,
+            max: 8,
+            divisions: 8,
+            label: threads == 0 ? S.t("Auto", "自动") : "$threads",
+            onChanged: (double value) {
+              AppPreferences.setThreadLimit(value.round());
+            },
+          ),
+          Text(
+            S.t(
+              "Auto lets FFmpeg decide. 1 thread is very slow; 6–8 can starve the foreground. The useful range is 2–4.",
+              "自动由 FFmpeg 决定。1 线程很慢；6–8 会抢前台资源。常用范围是 2–4。",
+            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  S.t("Memory budget", "内存上限"),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                memory == 0 ? S.t("System default", "系统默认") : "$memory MB",
+                style: Theme.of(context).textTheme.titleSmall
+                    ?.copyWith(color: scheme.primary),
+              ),
+            ],
+          ),
+          Slider(
+            value: memory == 0 ? 0 : memory.toDouble(),
+            min: 0,
+            max: 4096,
+            divisions: 32,
+            label: memory == 0 ? S.t("System default", "系统默认") : "$memory MB",
+            onChanged: (double value) {
+              final int next = value <= 0 ? 0 : (value / 128).round() * 128;
+              AppPreferences.setMemoryBudgetMb(next);
+            },
+          ),
+          Text(
+            S.t(
+              "0 means no app-side cap. The provisional floor is 512 MB and the ceiling is 4096 MB; this range is waiting for your confirmation. Android may still kill the process under pressure, and virtual RAM is not requested on purpose.",
+              "0 表示不设应用侧上限。暂定下限 512 MB、上限 4096 MB，这个范围等你确认。系统压力大时仍可能杀掉进程；不会主动占用厂商虚拟内存。",
+            ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          if (threads == 1 || threads >= 6)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                threads == 1
+                    ? S.t(
+                        "One thread keeps the phone usable but can be extremely slow.",
+                        "单线程能让手机保持可用，但会非常慢。",
+                      )
+                    : S.t(
+                        "Six to eight threads can make the foreground stutter; use 1–4 unless the phone can spare it.",
+                        "6 到 8 线程会让前台卡顿；除非手机扛得住，建议 1–4。",
+                      ),
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.error),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shortcutsPanel(ColorScheme scheme) {
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _panelTitle(scheme, Icons.keyboard_rounded, S.t("Shortcuts", "快捷键")),
+          const SizedBox(height: 6),
+          Text(
+            S.t(
+              "Ctrl+O adds files, Ctrl+Enter starts or cancels, Esc cancels, Ctrl+, opens Settings. These are fixed in 1.6 and do not change the Android build.",
+              "Ctrl+O 添加文件，Ctrl+Enter 开始或取消，Esc 取消，Ctrl+, 打开设置。1.6 固定这套组合，不影响安卓版。",
+            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          _factRow(scheme, "Ctrl+O", S.t("Add video / audio", "添加视频 / 音频")),
+          _factRow(scheme, "Ctrl+Enter", S.t("Start / cancel", "开始 / 取消")),
+          _factRow(scheme, "Esc", S.t("Cancel the running job", "取消正在跑的任务")),
+          _factRow(scheme, "Ctrl+,", S.t("Open Settings", "打开设置")),
         ],
       ),
     );

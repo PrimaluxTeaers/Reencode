@@ -4,7 +4,7 @@
 
 安装包命名：`Reencode-WindowsX86-64`
 
-Windows 1.6 还没有构建。这一轮只发布 Android arm64-v8a；Windows 版按 1.6 口径写好说明，正式构建另开工。当前仓库没有 `windows/` runner，Linux 环境不能产出 exe。
+Windows 1.6 由 GitHub Actions 的 `windows-latest` runner 构建，产物是 `Reencode-WindowsX86-64-1.6.0.zip`，解压后运行目录里的 `reencode.exe`。本机 Windows 10 / 11 x64 的图形和硬件编码仍需在真实机器上复核；Linux 环境不能直接产出 exe。
 
 已确认的 Windows 口径：
 
@@ -22,7 +22,7 @@ Windows 1.6 还没有构建。这一轮只发布 Android arm64-v8a；Windows 版
 
 Installer name: `Reencode-WindowsX86-64`
 
-The Windows 1.6 build does not exist yet. This round ships Android arm64-v8a only; the Windows documentation is written for 1.6, and the actual build starts separately. The repository has no `windows/` runner, and a Linux machine cannot produce an exe.
+The Windows 1.6 build is produced on GitHub Actions' `windows-latest` runner as `Reencode-WindowsX86-64-1.6.0.zip`; unzip it and run `reencode.exe` from the release folder. Graphics and hardware-encoder behaviour on a real Windows 10 / 11 x64 machine still needs a local pass; a Linux machine cannot produce the exe directly.
 
 Confirmed Windows behaviour:
 

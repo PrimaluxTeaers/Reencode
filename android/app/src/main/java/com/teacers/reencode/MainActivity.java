@@ -1,13 +1,21 @@
 package com.teacers.reencode;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaFormat;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.webkit.MimeTypeMap;
 
@@ -15,6 +23,8 @@ import androidx.annotation.NonNull;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -28,12 +38,18 @@ import io.flutter.plugin.common.MethodChannel;
 
 public class MainActivity extends FlutterActivity {
 	private static final String OUTPUT_CHANNEL = "reencode/output";
+	private static final String PROGRESS_CHANNEL = "reencode/progress";
+	private static final String DEVICE_CHANNEL = "reencode/device";
+	private static final String GALLERY_CHANNEL = "reencode/gallery";
 	private static final int REQUEST_OUTPUT_TREE = 0x5245;
+	private static final int REQUEST_NOTIFICATIONS = 0x5246;
+	private static final int REQUEST_GALLERY = 0x5247;
 	private static final String OUTPUT_PREFS = "reencode_output";
 	private static final String KEY_TREE_URI = "tree_uri";
 	private static final String KEY_TREE_NAME = "tree_name";
 
 	private MethodChannel.Result pendingOutputResult;
+	private MethodChannel.Result pendingGalleryResult;
 
 	@Override
 	public void configureFlutterEngine(@NonNull FlutterEngine flutterEngine) {
@@ -62,6 +78,200 @@ public class MainActivity extends FlutterActivity {
 						result.notImplemented();
 				}
 			});
+
+		new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), GALLERY_CHANNEL)
+			.setMethodCallHandler((call, result) -> {
+				if ("pickVideo".equals(call.method)) {
+					pickGalleryVideo(result);
+				} else {
+					result.notImplemented();
+				}
+			});
+
+		new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), DEVICE_CHANNEL)
+			.setMethodCallHandler((call, result) -> {
+				if ("profile".equals(call.method)) {
+					result.success(deviceProfile());
+				} else {
+					result.notImplemented();
+				}
+			});
+
+		new MethodChannel(flutterEngine.getDartExecutor().getBinaryMessenger(), PROGRESS_CHANNEL)
+			.setMethodCallHandler((call, result) -> {
+				Map<?, ?> args = call.arguments instanceof Map ? (Map<?, ?>) call.arguments : null;
+				String title = stringArg(args, "title", "Reencode");
+				String text = stringArg(args, "text", "");
+				int progress = intArg(args, "progress", 0);
+				switch (call.method) {
+					case "start":
+						ensureNotificationPermission();
+						ProgressService.start(this, title, text, args != null && Boolean.TRUE.equals(args.get("keepAwake")));
+						result.success(true);
+						break;
+					case "update":
+						ProgressService.update(this, title, text, progress);
+						result.success(true);
+						break;
+					case "stop":
+						ProgressService.stop(this);
+						result.success(true);
+						break;
+					default:
+						result.notImplemented();
+				}
+			});
+	}
+
+	private void pickGalleryVideo(MethodChannel.Result result) {
+		if (pendingGalleryResult != null) {
+			result.error("busy", "The gallery picker is already open.", null);
+			return;
+		}
+		Intent intent;
+		if (Build.VERSION.SDK_INT >= 33) {
+			intent = new Intent(MediaStore.ACTION_PICK_IMAGES);
+			intent.setType("video/*");
+		} else {
+			intent = new Intent(Intent.ACTION_GET_CONTENT);
+			intent.addCategory(Intent.CATEGORY_OPENABLE);
+			intent.setType("video/*");
+		}
+		pendingGalleryResult = result;
+		try {
+			startActivityForResult(intent, REQUEST_GALLERY);
+		} catch (Exception first) {
+			pendingGalleryResult = null;
+			try {
+				Intent fallback = new Intent(Intent.ACTION_GET_CONTENT);
+				fallback.addCategory(Intent.CATEGORY_OPENABLE);
+				fallback.setType("video/*");
+				pendingGalleryResult = result;
+				startActivityForResult(fallback, REQUEST_GALLERY);
+			} catch (Exception second) {
+				pendingGalleryResult = null;
+				result.error("picker", second.getMessage(), null);
+			}
+		}
+	}
+
+	private void finalGallery(int resultCode, Intent data) {
+		MethodChannel.Result result = pendingGalleryResult;
+		pendingGalleryResult = null;
+		if (result == null) return;
+		if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+			result.success(null);
+			return;
+		}
+		Uri uri = data.getData();
+		try {
+			String name = displayName(uri);
+			if (name == null || name.isEmpty()) name = "gallery-video.mp4";
+			File folder = new File(getCacheDir(), "gallery");
+			if (!folder.exists() && !folder.mkdirs()) {
+				result.error("cache", "Could not create the cache folder.", null);
+				return;
+			}
+			File target = new File(folder, System.currentTimeMillis() + "-" + name);
+			try (InputStream in = getContentResolver().openInputStream(uri);
+				OutputStream out = new FileOutputStream(target)) {
+				if (in == null) throw new IOException("Empty gallery URI");
+				byte[] buffer = new byte[65536];
+				int read;
+				while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+			}
+			result.success(target.getAbsolutePath());
+		} catch (Exception error) {
+			result.error("copy", error.getMessage(), null);
+		}
+	}
+
+	private Map<String, Object> deviceProfile() {
+		Map<String, Object> map = new HashMap<>();
+		map.put("platform", "android");
+		map.put("sdk", Build.VERSION.SDK_INT);
+		map.put("release", Build.VERSION.RELEASE);
+		map.put("manufacturer", safe(Build.MANUFACTURER));
+		map.put("brand", safe(Build.BRAND));
+		map.put("model", safe(Build.MODEL));
+		map.put("hardware", safe(Build.HARDWARE));
+		map.put("board", safe(Build.BOARD));
+		String socModel = "";
+		String socManufacturer = "";
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+			socModel = safe(Build.SOC_MODEL);
+			socManufacturer = safe(Build.SOC_MANUFACTURER);
+		}
+		map.put("socModel", socModel);
+		map.put("socManufacturer", socManufacturer);
+		map.put("gpu", inferGpu(socModel + " " + Build.HARDWARE + " " + Build.BOARD));
+		map.put("cores", Runtime.getRuntime().availableProcessors());
+		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+		ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
+		manager.getMemoryInfo(info);
+		map.put("totalRamMb", info.totalMem / 1048576L);
+		map.put("lowRam", info.lowMemory);
+		boolean av1Decode = false;
+		boolean av1Encode = false;
+		boolean avcEncode = false;
+		boolean hevcEncode = false;
+		try {
+			MediaCodecList list = new MediaCodecList(MediaCodecList.REGULAR_CODECS);
+			for (MediaCodecInfo codec : list.getCodecInfos()) {
+				for (String type : codec.getSupportedTypes()) {
+					if (MediaFormat.MIMETYPE_VIDEO_AV1.equals(type)) {
+						if (codec.isEncoder()) av1Encode = true; else av1Decode = true;
+					} else if (MediaFormat.MIMETYPE_VIDEO_AVC.equals(type) && codec.isEncoder()) {
+						avcEncode = true;
+					} else if ("video/hevc".equals(type) && codec.isEncoder()) {
+						hevcEncode = true;
+					}
+				}
+			}
+		} catch (Throwable ignored) {
+			// A device that refuses the codec list still gets the rest of the profile.
+		}
+		map.put("av1Decode", av1Decode);
+		map.put("av1Encode", av1Encode);
+		map.put("avcEncode", avcEncode);
+		map.put("hevcEncode", hevcEncode);
+		return map;
+	}
+
+	private String safe(String value) {
+		return value == null ? "" : value;
+	}
+
+	private String inferGpu(String raw) {
+		String lower = raw.toLowerCase();
+		if (lower.contains("9600")) return "Mali-G2 Ultra NX (Dimensity 9600)";
+		if (lower.contains("9400")) return "Mali-G925 (Dimensity 9400)";
+		if (lower.contains("9300")) return "Mali-G720 (Dimensity 9300)";
+		if (lower.contains("8500") || lower.contains("8400")) return "Mali-G720 (Dimensity 8000 series)";
+		if (lower.contains("8 elite") || lower.contains("sm8750") || lower.contains("sm8850")) return "Adreno 8xx (Snapdragon 8 Elite)";
+		if (lower.contains("sm7750") || lower.contains("7 gen 4")) return "Adreno 722 (Snapdragon 7 Gen 4)";
+		if (lower.contains("mali")) return "Mali";
+		if (lower.contains("adreno")) return "Adreno";
+		return "Unknown GPU";
+	}
+
+	private String stringArg(Map<?, ?> args, String key, String fallback) {
+		if (args == null) return fallback;
+		Object value = args.get(key);
+		return value instanceof String ? (String) value : fallback;
+	}
+
+	private int intArg(Map<?, ?> args, String key, int fallback) {
+		if (args == null) return fallback;
+		Object value = args.get(key);
+		return value instanceof Number ? ((Number) value).intValue() : fallback;
+	}
+
+	private void ensureNotificationPermission() {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+		if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+			== PackageManager.PERMISSION_GRANTED) return;
+		requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
 	}
 
 	private SharedPreferences outputPrefs() {
@@ -106,6 +316,10 @@ public class MainActivity extends FlutterActivity {
 	@Override
 	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
 		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == REQUEST_GALLERY) {
+			finalGallery(resultCode, data);
+			return;
+		}
 		if (requestCode != REQUEST_OUTPUT_TREE) return;
 		MethodChannel.Result result = pendingOutputResult;
 		pendingOutputResult = null;

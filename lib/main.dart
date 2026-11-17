@@ -8,9 +8,14 @@ import "package:path/path.dart" as p;
 import "package:path_provider/path_provider.dart";
 import "package:share_plus/share_plus.dart";
 
+import "background_progress.dart";
 import "dialogs.dart";
+import "codec_details.dart";
 import "engine.dart";
+import "gallery_picker.dart";
+import "hardware_profile.dart";
 import "l10n.dart";
+import "media_tools.dart";
 import "models.dart";
 import "output_store.dart";
 import "page_route.dart";
@@ -21,6 +26,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await S.load();
   await AppPreferences.load();
+  await HardwareProfile.load();
   runApp(const ReencodeApp());
 }
 
@@ -53,7 +59,7 @@ class _ReencodeAppState extends State<ReencodeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "Reencode",
+      title: "Reencode 64 位",
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(Brightness.light, AppPreferences.seed),
       darkTheme: buildAppTheme(Brightness.dark, AppPreferences.seed),
@@ -104,17 +110,60 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _pickVideos() async {
     if (_adding || _running) return;
+    final String? source = await showDialog<String>(
+      context: context,
+      builder: (BuildContext ctx) => SimpleDialog(
+        title: Text(S.t("Add video from", "从哪里添加视频")),
+        children: <Widget>[
+          if (Platform.isAndroid)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(ctx).pop("gallery"),
+              child: ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text(S.t("System gallery", "系统相册")),
+                subtitle: Text(
+                  S.t(
+                    "Android Photo Picker, including Google Photos and the OEM gallery. One video, one-time access; the app copies it into its cache.",
+                    "安卓系统相册，含 Google 相册和厂商相册。一次选一条，只授权这一次，应用会复制到缓存。",
+                  ),
+                ),
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(ctx).pop("files"),
+            child: ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(S.t("File manager", "文件管理器")),
+              subtitle: Text(
+                S.t(
+                  "Pick one or more video files from any provider.",
+                  "从任意文件提供方选一条或多条视频。",
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (source == null || !mounted) return;
     setState(() => _adding = true);
     try {
-      final List<PlatformFile> picked = await FilePicker.pickFiles(
-        type: FileType.video,
-      );
-      if (picked.isEmpty) return;
-      final List<String> paths = picked
-          .map((PlatformFile file) => file.path)
-          .whereType<String>()
-          .where((String path) => path.isNotEmpty)
-          .toList();
+      final List<String> paths = <String>[];
+      if (source == "gallery") {
+        final String? path = await GalleryPicker.pickVideo();
+        if (path != null && path.isNotEmpty) paths.add(path);
+      } else {
+        final List<PlatformFile> picked = await FilePicker.pickFiles(
+          type: FileType.video,
+        );
+        paths.addAll(
+          picked
+              .map((PlatformFile file) => file.path)
+              .whereType<String>()
+              .where((String path) => path.isNotEmpty),
+        );
+      }
+      if (paths.isEmpty) return;
       final List<String> fresh = <String>[];
       for (final String path in paths) {
         if (_jobs.any((VideoJob job) => job.path == path)) continue;
@@ -228,6 +277,11 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
+      await BackgroundProgress.start(
+        "Reencode",
+        S.t("Preparing the conversion", "正在准备转换"),
+        keepAwake: AppPreferences.backgroundMode,
+      );
       final Directory temp = await getTemporaryDirectory();
       final Directory outDir = Directory(p.join(temp.path, "reencode"));
       if (!await outDir.exists()) {
@@ -255,10 +309,14 @@ class _HomePageState extends State<HomePage> {
         final String outputPath = p.join(outDir.path, outputName);
         final ConversionResult result = await _runner.run(
           media: media,
-          recipe: _recipe,
+          recipe: _recipe.copyWith(
+            threadLimit: AppPreferences.threadLimit,
+            memoryBudgetMb: AppPreferences.memoryBudgetMb,
+          ),
           outputPath: outputPath,
           onProgress: (double progress) {
             if (mounted) setState(() => job.progress = progress);
+            BackgroundProgress.update("Reencode", job.name, progress);
           },
         );
 
@@ -334,6 +392,7 @@ class _HomePageState extends State<HomePage> {
     } catch (error) {
       _toast(S.t("Conversion setup failed: $error", "转换准备失败：$error"));
     } finally {
+      await BackgroundProgress.stop();
       if (mounted) {
         setState(() => _running = false);
         final int completed = _jobs
@@ -444,7 +503,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final bool hasJobs = _jobs.isNotEmpty;
-    return Scaffold(
+    final Widget page = Scaffold(
       backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(
@@ -462,6 +521,26 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       bottomNavigationBar: hasJobs ? _bottomBar(scheme) : null,
+    );
+    if (!Platform.isWindows) return page;
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyO, control: true):
+            _pickVideos,
+        const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
+          if (_running) {
+            _cancelAll();
+          } else {
+            _startAll();
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_running) _cancelAll();
+        },
+        const SingleActivator(LogicalKeyboardKey.comma, control: true):
+            _openSettings,
+      },
+      child: Focus(autofocus: true, child: page),
     );
   }
 
@@ -614,7 +693,7 @@ class _HomePageState extends State<HomePage> {
                 scheme,
                 Icons.memory_rounded,
                 S.t("Codec", "编码"),
-                "H.264 · H.265 · VP9 · MPEG-4",
+                "H.264 · H.265 · VP9 · AV1 · MPEG-4",
               ),
             ),
             const SizedBox(width: 10),
@@ -630,6 +709,8 @@ class _HomePageState extends State<HomePage> {
         ),
         const SizedBox(height: 14),
         _quickSettings(scheme),
+        const SizedBox(height: 14),
+        _toolsEntry(scheme),
       ],
     );
   }
@@ -658,7 +739,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const Spacer(),
               Text(
-                S.t("4 available", "4 种可选"),
+                S.t("5 available", "5 种可选"),
                 style: Theme.of(context).textTheme.labelSmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
               ),
@@ -672,14 +753,15 @@ class _HomePageState extends State<HomePage> {
               _codecBadge(scheme, "H.264"),
               _codecBadge(scheme, "H.265"),
               _codecBadge(scheme, "VP9"),
+              _codecBadge(scheme, "AV1"),
               _codecBadge(scheme, "MPEG-4"),
             ],
           ),
           const SizedBox(height: 9),
           Text(
             S.t(
-              "H.265 and VP9 can keep a 10-bit source. H.264 writes 8-bit. MPEG-4 is the legacy fallback.",
-              "H.265 和 VP9 可保留 10-bit 源；H.264 输出 8-bit；MPEG-4 是老设备兜底。",
+              "H.265, VP9 and AV1 can keep a 10-bit source. H.264 writes 8-bit. MPEG-4 is the legacy fallback.",
+              "H.265、VP9、AV1 可保留 10-bit 源；H.264 输出 8-bit；MPEG-4 是老设备兜底。",
             ),
             style: Theme.of(context).textTheme.labelSmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
@@ -752,6 +834,76 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _toolsEntry(ColorScheme scheme) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () => Navigator.of(context)
+            .push<bool>(appPageRoute(builder: (_) => const MediaToolsPage())),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 14, 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: <Color>[
+                scheme.primaryContainer.withValues(alpha: 0.72),
+                scheme.tertiaryContainer.withValues(alpha: 0.45),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.onPrimaryContainer.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  Icons.call_split_rounded,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      S.t("Merge, split, audio", "合并、分离、音频"),
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(color: scheme.onPrimaryContainer),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      S.t(
+                        "Pull the audio out, put it back, or keep just the sound.",
+                        "把音频拆出来、放回去，或者只留声音。",
+                      ),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: scheme.onPrimaryContainer.withValues(
+                          alpha: 0.72,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: scheme.onPrimaryContainer,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _feature(
     ColorScheme scheme,
     IconData icon,
@@ -812,6 +964,8 @@ class _HomePageState extends State<HomePage> {
           _jobCard(scheme, job),
           const SizedBox(height: 10),
         ],
+        const SizedBox(height: 2),
+        _toolsEntry(scheme),
       ],
     );
   }
@@ -831,6 +985,7 @@ class _HomePageState extends State<HomePage> {
       video?.resolution,
       video?.codec.toUpperCase(),
       video?.fpsLabel,
+      video?.hdrLabel,
       job.media?.sizeLabel,
     ].where((String? value) => value != null && value != "—").join(" · ");
 
@@ -1203,6 +1358,7 @@ class _RecipeCardState extends State<RecipeCard> {
   late final TextEditingController _audioBitrate;
   bool _useMbps = false;
   bool _showSlider = false;
+  bool _showAdvanced = false;
   bool _fps144Unlocked = false;
   int _tap120 = 0;
 
@@ -1287,7 +1443,8 @@ class _RecipeCardState extends State<RecipeCard> {
     ConversionRecipe recipe = widget.recipe.copyWith(container: container);
     if (recipe.mode != WorkMode.remux) {
       if (container == TargetContainer.webm) {
-        if (recipe.videoCodec != VideoCodec.vp9) {
+        if (recipe.videoCodec != VideoCodec.vp9 &&
+            recipe.videoCodec != VideoCodec.av1) {
           recipe = recipe.copyWith(videoCodec: VideoCodec.vp9);
         }
         if (recipe.audioCodec != AudioCodec.opus &&
@@ -1296,7 +1453,9 @@ class _RecipeCardState extends State<RecipeCard> {
         }
       } else if (container == TargetContainer.mp4 ||
           container == TargetContainer.mov) {
-        if (recipe.videoCodec == VideoCodec.vp9) {
+        if (recipe.videoCodec == VideoCodec.vp9 ||
+            (container == TargetContainer.mov &&
+                recipe.videoCodec == VideoCodec.av1)) {
           recipe = recipe.copyWith(videoCodec: VideoCodec.h264);
         }
         if (recipe.audioCodec == AudioCodec.opus) {
@@ -1368,6 +1527,88 @@ class _RecipeCardState extends State<RecipeCard> {
     if (confirmed == true && mounted) {
       setState(() => _fps144Unlocked = true);
     }
+  }
+
+  Future<void> _pickCustomSize() async {
+    final TextEditingController width = TextEditingController(
+      text: widget.recipe.targetWidth > 0 ? "${widget.recipe.targetWidth}" : "",
+    );
+    final TextEditingController height = TextEditingController(
+      text: widget.recipe.targetHeight > 0
+          ? "${widget.recipe.targetHeight}"
+          : "",
+    );
+    final List<int>? value = await showDialog<List<int>>(
+      context: context,
+      builder: (BuildContext ctx) => AlertDialog(
+        title: Text(S.t("Custom size", "自定义分辨率")),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    controller: width,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: const InputDecoration(labelText: "Width"),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Text("×"),
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: height,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: const InputDecoration(labelText: "Height"),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              S.t(
+                "Exact output pixels, both sides. Even numbers only; 16–7680 per side. Pixel density is a display setting and is not written here.",
+                "直接写输出像素的宽和高。只收偶数，单边 16–7680。像素密度属于显示层，这里不写。",
+              ),
+              style: Theme.of(ctx).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(S.t("Cancel", "取消")),
+          ),
+          FilledButton(
+            onPressed: () {
+              final int? w = int.tryParse(width.text.trim());
+              final int? h = int.tryParse(height.text.trim());
+              if (w == null || h == null) {
+                Navigator.of(ctx).pop();
+                return;
+              }
+              Navigator.of(ctx).pop(<int>[w, h]);
+            },
+            child: Text(S.t("Use size", "使用")),
+          ),
+        ],
+      ),
+    );
+    width.dispose();
+    height.dispose();
+    if (value == null || value.length != 2 || !mounted) return;
+    widget.onChanged(
+      widget.recipe.copyWith(targetWidth: value[0], targetHeight: value[1]),
+    );
   }
 
   List<int> get _heights {
@@ -1545,6 +1786,264 @@ class _RecipeCardState extends State<RecipeCard> {
                 ],
               ),
             ),
+          const SizedBox(height: 12),
+          _advancedHeader(scheme),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            child: _showAdvanced
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: _advancedBody(scheme),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _advancedHeader(ColorScheme scheme) {
+    return Material(
+      color: scheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _showAdvanced = !_showAdvanced);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 20, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      S.t("More settings", "更多设置"),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      S.t(
+                        "HDR, metadata and optional tools, one switch at a time.",
+                        "HDR、元数据和可选工具，一项一个开关。",
+                      ),
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedRotation(
+                turns: _showAdvanced ? 0.5 : 0,
+                duration: const Duration(milliseconds: 220),
+                child: const Icon(Icons.expand_more_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _advancedBody(ColorScheme scheme) {
+    final StreamSummary? video = widget.sample?.video;
+    final bool hdr = video?.isHdr ?? false;
+    final bool hdr10Plus = video?.hasHdr10PlusMetadata ?? false;
+    final bool dolbyVision = video?.hasDolbyVisionMetadata ?? false;
+    final bool remux = widget.recipe.mode == WorkMode.remux;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          _label(scheme, S.t("Encoding path", "编码路径")),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: HardwareAcceleration.values.map((value) {
+              return ChoiceChip(
+                selected: widget.recipe.hardwareAcceleration == value,
+                onSelected: widget.enabled
+                    ? (_) => widget.onChanged(
+                        widget.recipe.copyWith(hardwareAcceleration: value),
+                      )
+                    : null,
+                label: Text(value.label),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.recipe.hardwareAcceleration.note,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            widget.recipe.hardwareAcceleration ==
+                    HardwareAcceleration.mediaCodec
+                ? S.t(
+                    "MediaCodec uses the phone's video hardware, which is a dedicated VPU rather than the GPU shader cores. AV1 is decode-only on current phones, so AV1 export remains software.",
+                    "MediaCodec 走手机的专用视频单元，不是 GPU 着色器。当前手机的 AV1 只有解码，所以 AV1 导出仍走软件。",
+                  )
+                : S.t(
+                    "CPU path is deterministic. If this phone has a hardware encoder, Hardware mode can cut time and heat; verify the output before a long batch.",
+                    "CPU 路径最稳定。手机有硬件编码器时，硬件模式能省时间和发热；长批次前先验一条输出。",
+                  ),
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Hardware decode (experimental)", "硬件解码（实验）")),
+            subtitle: Text(
+              S.t(
+                "Feeds the decoder through MediaCodec when the phone exposes it. Some codecs refuse the frame format; the job then uses software decode. Not a GPU shader path.",
+                "手机支持时让解码走 MediaCodec。部分编码器会拒绝该帧格式，任务随后用软件解码。不是 GPU 着色器路径。",
+              ),
+            ),
+            value: widget.recipe.hardwareDecode,
+            onChanged: widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(hardwareDecode: value),
+                  )
+                : null,
+          ),
+          const Divider(height: 26),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Keep HDR10 static metadata", "保留 HDR10 静态元数据")),
+            subtitle: Text(
+              hdr
+                  ? S.t(
+                      "Writes Mastering Display and CLL when re-encoding with H.265. Remux keeps the bitstream as-is.",
+                      "用 H.265 重编码时写入 Mastering Display 和 CLL；只换容器则原样保留码流。",
+                    )
+                  : S.t(
+                      "No HDR10 metadata found in this source.",
+                      "这个源文件里没有 HDR10 元数据。",
+                    ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.preserveHdr10 && hdr,
+            onChanged: hdr && widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(preserveHdr10: value),
+                  )
+                : null,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Keep HDR10+ dynamic metadata", "保留 HDR10+ 动态元数据")),
+            subtitle: Text(
+              hdr10Plus
+                  ? S.t(
+                      "Only Remux can keep it untouched. This build cannot inject HDR10+ after re-encoding.",
+                      "只有“只换容器”能原样保留。这版重编码后写不了 HDR10+。",
+                    )
+                  : S.t(
+                      "No HDR10+ side data found in this source.",
+                      "这个源文件里没有 HDR10+ 侧数据。",
+                    ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.preserveHdr10Plus && hdr10Plus && remux,
+            onChanged: hdr10Plus && remux && widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(preserveHdr10Plus: value),
+                  )
+                : null,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Keep Dolby Vision", "保留杜比视界")),
+            subtitle: Text(
+              dolbyVision
+                  ? S.t(
+                      "Stream copy only. Re-encoding would drop the Dolby Vision layer.",
+                      "只能流复制。重新编码会丢掉杜比视界层。",
+                    )
+                  : S.t(
+                      "No Dolby Vision side data found in this source.",
+                      "这个源文件里没有杜比视界侧数据。",
+                    ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.preserveDolbyVision && dolbyVision && remux,
+            onChanged: dolbyVision && remux && widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(preserveDolbyVision: value),
+                  )
+                : null,
+          ),
+          const Divider(height: 18),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Keep global metadata", "保留全局元数据")),
+            subtitle: Text(
+              S.t(
+                "Copies title, author, creation time and other global tags.",
+                "复制标题、作者、创建时间等全局标签。",
+              ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.keepMetadata,
+            onChanged: widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(keepMetadata: value),
+                  )
+                : null,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Keep chapters", "保留章节")),
+            subtitle: Text(
+              S.t(
+                "Simple chapter lists survive. Complex structures may be flattened by FFmpeg.",
+                "简单章节表能保留；复杂结构可能被 FFmpeg 简化。",
+              ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.keepChapters,
+            onChanged: widget.enabled
+                ? (bool value) => widget.onChanged(
+                    widget.recipe.copyWith(keepChapters: value),
+                  )
+                : null,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Fast start for MP4 / MOV", "MP4 / MOV 快速启动")),
+            subtitle: Text(
+              S.t(
+                "Moves the index to the front so playback starts before the whole file is read.",
+                "把索引挪到文件前面，边下边播时能更快出画面。",
+              ),
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            value: widget.recipe.fastStart,
+            onChanged: widget.enabled
+                ? (bool value) =>
+                      widget.onChanged(widget.recipe.copyWith(fastStart: value))
+                : null,
+          ),
         ],
       ),
     );
@@ -1592,22 +2091,42 @@ class _RecipeCardState extends State<RecipeCard> {
           spacing: 8,
           runSpacing: 8,
           children: VideoCodec.values.map((VideoCodec codec) {
-            return ChoiceChip(
-              selected: widget.recipe.videoCodec == codec,
-              onSelected: widget.enabled
-                  ? (_) => widget.onChanged(
-                      widget.recipe.copyWith(videoCodec: codec),
-                    )
-                  : null,
-              label: Text(codec.shortLabel),
+            return GestureDetector(
+              onLongPress: () => showCodecDetail(context, codec),
+              child: ChoiceChip(
+                selected: widget.recipe.videoCodec == codec,
+                onSelected: widget.enabled
+                    ? (_) => widget.onChanged(
+                        widget.recipe.copyWith(videoCodec: codec),
+                      )
+                    : null,
+                label: Text(codec.shortLabel),
+              ),
             );
           }).toList(),
         ),
         const SizedBox(height: 6),
-        Text(
-          widget.recipe.videoCodec.note,
-          style: Theme.of(context).textTheme.labelSmall
-              ?.copyWith(color: scheme.onSurfaceVariant),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                widget.recipe.videoCodec.note,
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(width: 6),
+            TextButton(
+              onPressed: () =>
+                  showCodecDetail(context, widget.recipe.videoCodec),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(S.t("Details", "详情")),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         _label(scheme, S.t("Video bitrate", "视频码率")),
@@ -1733,10 +2252,36 @@ class _RecipeCardState extends State<RecipeCard> {
           }).toList(),
         ),
         const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            ActionChip(
+              avatar: const Icon(Icons.crop_free_rounded, size: 18),
+              onPressed: widget.enabled ? _pickCustomSize : null,
+              label: Text(
+                widget.recipe.targetWidth > 0 && widget.recipe.targetHeight > 0
+                    ? "${widget.recipe.targetWidth}×${widget.recipe.targetHeight}"
+                    : S.t("Custom", "自定义"),
+              ),
+            ),
+            if (widget.recipe.targetWidth > 0)
+              ActionChip(
+                avatar: const Icon(Icons.restart_alt_rounded, size: 18),
+                onPressed: widget.enabled
+                    ? () => widget.onChanged(
+                        widget.recipe.copyWith(targetWidth: 0, targetHeight: 0),
+                      )
+                    : null,
+                label: Text(S.t("Clear custom size", "清除自定义")),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
         Text(
           S.t(
-            "Tiers keep the source aspect. “Original” keeps its exact size. 1.5K is experimental and will not restore detail the source never had.",
-            "档位按源比例缩放；“原始”保持原尺寸。1.5K 是实验档，不会把源里没有的细节变出来。",
+            "Tiers keep the source aspect. “Original” keeps its exact size. 1.5K is experimental and will not restore detail the source never had. Custom writes exact pixels; pixel density belongs to the display layer and is not written.",
+            "档位按源比例缩放；“原始”保持原尺寸。1.5K 是实验档，不会把源里没有的细节变出来。自定义直接写像素；像素密度属于显示层，不写进视频。",
           ),
           style: Theme.of(context).textTheme.labelSmall
               ?.copyWith(color: scheme.onSurfaceVariant),

@@ -5,6 +5,7 @@ import "package:ffmpeg_kit_flutter_new/stream_information.dart";
 import "package:material_ui/material_ui.dart";
 import "package:path/path.dart" as p;
 
+import "hardware_profile.dart";
 import "l10n.dart";
 
 enum WorkMode { remux, transcode, compress }
@@ -58,13 +59,14 @@ extension TargetContainerInfo on TargetContainer {
   };
 }
 
-enum VideoCodec { h264, h265, vp9, mpeg4 }
+enum VideoCodec { h264, h265, vp9, av1, mpeg4 }
 
 extension VideoCodecInfo on VideoCodec {
   String get label => switch (this) {
     VideoCodec.h264 => "H.264",
     VideoCodec.h265 => "H.265 / HEVC",
     VideoCodec.vp9 => "VP9",
+    VideoCodec.av1 => "AV1",
     VideoCodec.mpeg4 => "MPEG-4",
   };
 
@@ -72,6 +74,7 @@ extension VideoCodecInfo on VideoCodec {
     VideoCodec.h264 => "H.264",
     VideoCodec.h265 => "H.265",
     VideoCodec.vp9 => "VP9",
+    VideoCodec.av1 => "AV1",
     VideoCodec.mpeg4 => "MPEG-4",
   };
 
@@ -79,6 +82,7 @@ extension VideoCodecInfo on VideoCodec {
     VideoCodec.h264 => "libx264",
     VideoCodec.h265 => "libx265",
     VideoCodec.vp9 => "libvpx-vp9",
+    VideoCodec.av1 => "libaom-av1",
     VideoCodec.mpeg4 => "mpeg4",
   };
 
@@ -86,6 +90,10 @@ extension VideoCodecInfo on VideoCodec {
     VideoCodec.h264 => S.t("Widest device support", "设备兼容最广"),
     VideoCodec.h265 => S.t("Smaller files, slower encode", "同画质更小，编码更慢"),
     VideoCodec.vp9 => S.t("Open codec for WebM", "WebM 常用的开放编码"),
+    VideoCodec.av1 => S.t(
+      "Best compression, very slow on phones",
+      "压缩最好，手机编码很慢",
+    ),
     VideoCodec.mpeg4 => S.t("Legacy compatibility", "老设备兼容"),
   };
 }
@@ -109,6 +117,49 @@ extension PixelDepthInfo on PixelDepth {
 }
 
 enum AudioCodec { aac, opus, mp3, copy }
+
+enum HardwareAcceleration { auto, software, mediaCodec }
+
+extension HardwareAccelerationInfo on HardwareAcceleration {
+  String get label => switch (this) {
+    HardwareAcceleration.auto => S.t("Auto", "自动"),
+    HardwareAcceleration.software => S.t("CPU only", "仅 CPU"),
+    HardwareAcceleration.mediaCodec => S.t("Hardware", "硬件加速"),
+  };
+
+  String get note => switch (this) {
+    HardwareAcceleration.auto => S.t(
+      "Use MediaCodec when the phone exposes a working encoder; otherwise stay on CPU.",
+      "手机有可用硬件编码器时走 MediaCodec，否则留在 CPU。",
+    ),
+    HardwareAcceleration.software => S.t(
+      "libx264 / libx265 / libaom on the CPU. Most predictable output.",
+      "libx264 / libx265 / libaom 纯 CPU，输出最可预测。",
+    ),
+    HardwareAcceleration.mediaCodec => S.t(
+      "Ask Android MediaCodec to encode H.264 / H.265. AV1 stays software because these chips do not expose an AV1 encoder.",
+      "让 Android MediaCodec 编 H.264 / H.265。AV1 仍走软件，因为这些芯片没有开放 AV1 编码器。",
+    ),
+  };
+}
+
+enum EncoderPreset { fast, balanced, slow, custom }
+
+extension EncoderPresetInfo on EncoderPreset {
+  String get label => switch (this) {
+    EncoderPreset.fast => S.t("Fast", "快"),
+    EncoderPreset.balanced => S.t("Balanced", "均衡"),
+    EncoderPreset.slow => S.t("Slow", "慢"),
+    EncoderPreset.custom => S.t("Custom", "自定义"),
+  };
+
+  String get ffmpegName => switch (this) {
+    EncoderPreset.fast => "veryfast",
+    EncoderPreset.balanced => "medium",
+    EncoderPreset.slow => "slow",
+    EncoderPreset.custom => "medium",
+  };
+}
 
 enum FrameRateMode { passthrough, cfr }
 
@@ -153,6 +204,14 @@ class StreamSummary {
   final int sampleRate;
   final String channelLayout;
   final int rotation;
+  final String colorPrimaries;
+  final String colorTransfer;
+  final String colorSpace;
+  final String masteringDisplay;
+  final int maxCll;
+  final int maxFall;
+  final bool hasHdr10Plus;
+  final bool hasDolbyVision;
 
   const StreamSummary({
     this.codec = "",
@@ -165,9 +224,37 @@ class StreamSummary {
     this.sampleRate = 0,
     this.channelLayout = "",
     this.rotation = 0,
+    this.colorPrimaries = "",
+    this.colorTransfer = "",
+    this.colorSpace = "",
+    this.masteringDisplay = "",
+    this.maxCll = 0,
+    this.maxFall = 0,
+    this.hasHdr10Plus = false,
+    this.hasDolbyVision = false,
   });
 
   bool get isTenBit => bitDepth >= 10;
+
+  bool get hasHdrMetadata =>
+      masteringDisplay.isNotEmpty || maxCll > 0 || maxFall > 0;
+
+  bool get isHdr =>
+      hasHdrMetadata ||
+      colorTransfer == "smpte2084" ||
+      colorTransfer == "arib-std-b67";
+
+  bool get hasHdr10PlusMetadata => hasHdr10Plus;
+
+  bool get hasDolbyVisionMetadata => hasDolbyVision;
+
+  String get hdrLabel {
+    final List<String> tags = <String>[];
+    if (hasDolbyVision) tags.add("Dolby Vision");
+    if (hasHdr10Plus) tags.add("HDR10+");
+    if (isHdr) tags.add("HDR10");
+    return tags.join(" · ");
+  }
 
   int get bitDepth {
     if (pixelFormat.contains("12le") || pixelFormat.contains("12be")) {
@@ -251,18 +338,7 @@ class MediaSummary {
 
     final StreamSummary? video = videoStream == null
         ? null
-        : StreamSummary(
-            codec: (videoStream.getCodec() ?? "").toLowerCase(),
-            width: videoStream.getWidth() ?? 0,
-            height: videoStream.getHeight() ?? 0,
-            pixelFormat: (videoStream.getFormat() ?? "").toLowerCase(),
-            fps: _parseRate(
-              videoStream.getAverageFrameRate() ??
-                  videoStream.getRealFrameRate(),
-            ),
-            bitrateKbps: (_toInt(videoStream.getBitrate()) ?? 0) ~/ 1000,
-            rotation: _rotationOf(videoStream),
-          );
+        : _videoSummary(videoStream);
     final StreamSummary? audio = audioStream == null
         ? null
         : StreamSummary(
@@ -283,6 +359,84 @@ class MediaSummary {
       video: video,
       audio: audio,
     );
+  }
+
+  static StreamSummary _videoSummary(StreamInformation stream) {
+    final List<Map<dynamic, dynamic>> sideData = _sideDataOf(stream);
+    Map<dynamic, dynamic>? mastering;
+    Map<dynamic, dynamic>? light;
+    bool hdr10Plus = false;
+    bool dolbyVision = false;
+    for (final Map<dynamic, dynamic> item in sideData) {
+      final String type = (item["side_data_type"] ?? "")
+          .toString()
+          .toLowerCase();
+      if (type.contains("mastering display")) mastering = item;
+      if (type.contains("content light")) light = item;
+      if (type.contains("hdr10+") ||
+          type.contains("smpte2094-40") ||
+          type.contains("hdr dynamic")) {
+        hdr10Plus = true;
+      }
+      if (type.contains("dolby vision") || type.contains("dovi")) {
+        dolbyVision = true;
+      }
+    }
+    return StreamSummary(
+      codec: (stream.getCodec() ?? "").toLowerCase(),
+      width: stream.getWidth() ?? 0,
+      height: stream.getHeight() ?? 0,
+      pixelFormat: (stream.getFormat() ?? "").toLowerCase(),
+      fps: _parseRate(
+        stream.getAverageFrameRate() ?? stream.getRealFrameRate(),
+      ),
+      bitrateKbps: (_toInt(stream.getBitrate()) ?? 0) ~/ 1000,
+      rotation: _rotationOf(stream),
+      colorPrimaries: (stream.getStringProperty("color_primaries") ?? "")
+          .toLowerCase(),
+      colorTransfer: (stream.getStringProperty("color_transfer") ?? "")
+          .toLowerCase(),
+      colorSpace: (stream.getStringProperty("color_space") ?? "").toLowerCase(),
+      masteringDisplay: mastering == null ? "" : _masteringDisplay(mastering),
+      maxCll: _toInt(light?["max_content"]) ?? 0,
+      maxFall: _toInt(light?["max_average"]) ?? 0,
+      hasHdr10Plus: hdr10Plus,
+      hasDolbyVision: dolbyVision,
+    );
+  }
+
+  static List<Map<dynamic, dynamic>> _sideDataOf(StreamInformation stream) {
+    final dynamic raw = stream.getProperty("side_data_list");
+    if (raw is! List) return const <Map<dynamic, dynamic>>[];
+    return raw.whereType<Map>().map((Map item) => item).toList();
+  }
+
+  static String _masteringDisplay(Map<dynamic, dynamic> data) {
+    final int gx = _scaled(data["green_x"], 50000);
+    final int gy = _scaled(data["green_y"], 50000);
+    final int bx = _scaled(data["blue_x"], 50000);
+    final int by = _scaled(data["blue_y"], 50000);
+    final int rx = _scaled(data["red_x"], 50000);
+    final int ry = _scaled(data["red_y"], 50000);
+    final int wx = _scaled(data["white_point_x"], 50000);
+    final int wy = _scaled(data["white_point_y"], 50000);
+    final int maxLum = _scaled(data["max_luminance"], 10000);
+    final int minLum = _scaled(data["min_luminance"], 10000);
+    if (gx <= 0 || gy <= 0 || bx <= 0 || by <= 0 || rx <= 0 || ry <= 0) {
+      return "";
+    }
+    return "G($gx,$gy)B($bx,$by)R($rx,$ry)WP($wx,$wy)L($maxLum,$minLum)";
+  }
+
+  static int _scaled(dynamic value, int scale) {
+    if (value is num) {
+      return value <= 1.0 ? (value * scale).round() : value.round();
+    }
+    final String text = value?.toString() ?? "";
+    final String numerator = text.split("/").first;
+    final double? parsed = double.tryParse(numerator);
+    if (parsed == null) return 0;
+    return parsed <= 1.0 ? (parsed * scale).round() : parsed.round();
   }
 
   static int _rotationOf(StreamInformation stream) {
@@ -337,10 +491,30 @@ class ConversionRecipe {
   final AudioCodec audioCodec;
   final int videoBitrateKbps;
   final int audioBitrateKbps;
+  final int targetWidth;
   final int targetHeight;
   final int targetFps;
   final PixelDepth pixelDepth;
   final FrameRateMode frameRateMode;
+  final bool preserveHdr10;
+  final bool preserveHdr10Plus;
+  final bool preserveDolbyVision;
+  final bool keepMetadata;
+  final bool keepChapters;
+  final bool fastStart;
+  final EncoderPreset encoderPreset;
+  final String customPreset;
+  final HardwareAcceleration hardwareAcceleration;
+
+  /// 0 means let FFmpeg decide. Android settings cap this at 8.
+  final int threadLimit;
+
+  /// Experimental Android decode through MediaCodec. Older phones can refuse
+  /// the pixel format, so the UI must keep a software fallback.
+  final bool hardwareDecode;
+
+  /// Soft app-side budget. 0 means no app-imposed queue limit.
+  final int memoryBudgetMb;
 
   const ConversionRecipe({
     this.mode = WorkMode.transcode,
@@ -349,11 +523,28 @@ class ConversionRecipe {
     this.audioCodec = AudioCodec.aac,
     this.videoBitrateKbps = 2000,
     this.audioBitrateKbps = 128,
+    this.targetWidth = 0,
     this.targetHeight = 0,
     this.targetFps = 0,
     this.pixelDepth = PixelDepth.auto,
     this.frameRateMode = FrameRateMode.passthrough,
+    this.preserveHdr10 = true,
+    this.preserveHdr10Plus = true,
+    this.preserveDolbyVision = true,
+    this.keepMetadata = true,
+    this.keepChapters = true,
+    this.fastStart = true,
+    this.encoderPreset = EncoderPreset.balanced,
+    this.customPreset = "medium",
+    this.hardwareAcceleration = HardwareAcceleration.software,
+    this.threadLimit = 0,
+    this.hardwareDecode = false,
+    this.memoryBudgetMb = 0,
   });
+
+  String get ffmpegPreset => encoderPreset == EncoderPreset.custom
+      ? (customPreset.trim().isEmpty ? "medium" : customPreset.trim())
+      : encoderPreset.ffmpegName;
 
   ConversionRecipe copyWith({
     WorkMode? mode,
@@ -362,10 +553,23 @@ class ConversionRecipe {
     AudioCodec? audioCodec,
     int? videoBitrateKbps,
     int? audioBitrateKbps,
+    int? targetWidth,
     int? targetHeight,
     int? targetFps,
     PixelDepth? pixelDepth,
     FrameRateMode? frameRateMode,
+    bool? preserveHdr10,
+    bool? preserveHdr10Plus,
+    bool? preserveDolbyVision,
+    bool? keepMetadata,
+    bool? keepChapters,
+    bool? fastStart,
+    EncoderPreset? encoderPreset,
+    String? customPreset,
+    HardwareAcceleration? hardwareAcceleration,
+    int? threadLimit,
+    bool? hardwareDecode,
+    int? memoryBudgetMb,
   }) {
     return ConversionRecipe(
       mode: mode ?? this.mode,
@@ -374,10 +578,24 @@ class ConversionRecipe {
       audioCodec: audioCodec ?? this.audioCodec,
       videoBitrateKbps: videoBitrateKbps ?? this.videoBitrateKbps,
       audioBitrateKbps: audioBitrateKbps ?? this.audioBitrateKbps,
+      targetWidth: targetWidth ?? this.targetWidth,
       targetHeight: targetHeight ?? this.targetHeight,
       targetFps: targetFps ?? this.targetFps,
       pixelDepth: pixelDepth ?? this.pixelDepth,
       frameRateMode: frameRateMode ?? this.frameRateMode,
+      preserveHdr10: preserveHdr10 ?? this.preserveHdr10,
+      preserveHdr10Plus: preserveHdr10Plus ?? this.preserveHdr10Plus,
+      preserveDolbyVision: preserveDolbyVision ?? this.preserveDolbyVision,
+      keepMetadata: keepMetadata ?? this.keepMetadata,
+      keepChapters: keepChapters ?? this.keepChapters,
+      fastStart: fastStart ?? this.fastStart,
+      encoderPreset: encoderPreset ?? this.encoderPreset,
+      customPreset: customPreset ?? this.customPreset,
+      hardwareAcceleration:
+          hardwareAcceleration ?? this.hardwareAcceleration,
+      threadLimit: threadLimit ?? this.threadLimit,
+      hardwareDecode: hardwareDecode ?? this.hardwareDecode,
+      memoryBudgetMb: memoryBudgetMb ?? this.memoryBudgetMb,
     );
   }
 
@@ -386,7 +604,10 @@ class ConversionRecipe {
     final StreamSummary? audio = media.audio;
     final String sourceCodec = video?.codec ?? "";
     final TargetContainer container =
-        sourceCodec == "h264" || sourceCodec == "hevc" || sourceCodec == "mpeg4"
+        sourceCodec == "h264" ||
+            sourceCodec == "hevc" ||
+            sourceCodec == "av1" ||
+            sourceCodec == "mpeg4"
         ? TargetContainer.mp4
         : TargetContainer.mkv;
     final int sourceVideoKbps = video?.bitrateKbps ?? 0;
@@ -401,8 +622,17 @@ class ConversionRecipe {
       audioCodec: AudioCodec.aac,
       videoBitrateKbps: fallbackVideo > 0 ? fallbackVideo : 2000,
       audioBitrateKbps: sourceAudioKbps > 0 ? sourceAudioKbps : 128,
+      targetWidth: 0,
       targetHeight: 0,
       targetFps: 0,
+      hardwareAcceleration: AppPreferences.hardwareEncoding
+          ? HardwareAcceleration.auto
+          : HardwareAcceleration.software,
+      threadLimit: AppPreferences.threadLimit,
+      memoryBudgetMb: AppPreferences.memoryBudgetMb,
+      preserveHdr10: video?.isHdr ?? false,
+      preserveHdr10Plus: video?.hasHdr10PlusMetadata ?? false,
+      preserveDolbyVision: video?.hasDolbyVisionMetadata ?? false,
     );
   }
 
@@ -410,7 +640,10 @@ class ConversionRecipe {
     if (mode == WorkMode.remux) {
       final String codec = media.video?.codec ?? "";
       final TargetContainer container =
-          codec == "h264" || codec == "hevc" || codec == "mpeg4"
+          codec == "h264" ||
+              codec == "hevc" ||
+              codec == "av1" ||
+              codec == "mpeg4"
           ? TargetContainer.mp4
           : TargetContainer.mkv;
       return copyWith(
@@ -523,6 +756,109 @@ class ConversionRecipe {
         );
       }
     }
+    if ((media.video?.hasHdr10PlusMetadata ?? false) &&
+        preserveHdr10Plus &&
+        mode != WorkMode.remux) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "HDR10+ dynamic metadata cannot be injected by this build. Only “Remux” keeps it untouched; turn the option off or use Remux.",
+            "这版写不了 HDR10+ 动态元数据。只有“只换容器”能原样保留；关掉这个选项，或者改用“只换容器”。",
+          ),
+          blocking: true,
+        ),
+      );
+    }
+    if ((media.video?.hasDolbyVisionMetadata ?? false) &&
+        preserveDolbyVision &&
+        mode != WorkMode.remux) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "Dolby Vision is only preserved by stream copy. Re-encoding this build would drop it.",
+            "杜比视界只有流复制能保留。这版重新编码会丢掉它。",
+          ),
+          blocking: true,
+        ),
+      );
+    }
+    if (mode == WorkMode.transcode &&
+        (media.video?.isHdr ?? false) &&
+        preserveHdr10 &&
+        videoCodec != VideoCodec.h265 &&
+        videoCodec != VideoCodec.av1) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "HDR10 static metadata needs H.265 or AV1 in this build. Switch codec or turn the option off.",
+            "这版只有 H.265 和 AV1 能处理 HDR10 静态信息。换编码，或者关掉这个选项。",
+          ),
+          blocking: true,
+        ),
+      );
+    }
+    if (mode == WorkMode.transcode &&
+        preserveHdr10 &&
+        (media.video?.isHdr ?? false) &&
+        videoCodec == VideoCodec.av1) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "AV1 writes HDR10 colour tags, but this build does not write Mastering Display / MaxCLL metadata.",
+            "AV1 会写 HDR10 色彩标记，但这一版不写 Mastering Display / MaxCLL 元数据。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (mode == WorkMode.transcode &&
+        preserveHdr10 &&
+        (media.video?.isHdr ?? false) &&
+        videoCodec == VideoCodec.h265 &&
+        !(media.video?.hasHdrMetadata ?? false)) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "The source is HDR, but its Mastering Display / CLL side data could not be read. HDR10 metadata will not be written.",
+            "源是 HDR，但读不到 Mastering Display / CLL 侧数据。不会写 HDR10 元数据。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (targetWidth > 0 || targetHeight > 0) {
+      if (targetWidth <= 0 || targetHeight <= 0) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "Custom size needs both width and height.",
+              "自定义分辨率需要同时填写宽度和高度。",
+            ),
+          ),
+        );
+      } else if (targetWidth < 16 ||
+          targetHeight < 16 ||
+          targetWidth > 7680 ||
+          targetHeight > 7680) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "Custom size must be between 16 and 7680 pixels on each side.",
+              "自定义分辨率的宽高要在 16 到 7680 像素之间。",
+            ),
+          ),
+        );
+      } else if (targetWidth.isOdd || targetHeight.isOdd) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "H.264 / H.265 need even dimensions. Round both sides to an even number.",
+              "H.264 / H.265 需要偶数尺寸，把宽高都改成偶数。",
+            ),
+          ),
+        );
+      }
+    }
     if (videoBitrateKbps < 1 || videoBitrateKbps > 100000) {
       issues.add(
         RecipeIssue(
@@ -577,6 +913,111 @@ class ConversionRecipe {
           blocking: false,
         ),
       );
+    }
+    if (hardwareAcceleration == HardwareAcceleration.mediaCodec &&
+        (videoCodec == VideoCodec.h264 || videoCodec == VideoCodec.h265)) {
+      final bool present = videoCodec == VideoCodec.h264
+          ? HardwareProfile.current.avcEncode
+          : HardwareProfile.current.hevcEncode;
+      if (!present) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "No usable MediaCodec encoder was found for this codec. The job will fall back to CPU; hardware mode is not a guarantee.",
+              "没有找到该编码可用的 MediaCodec 编码器。任务会回退到 CPU；硬件模式不是保证。",
+            ),
+            blocking: false,
+          ),
+        );
+      }
+    }
+    if (hardwareDecode && media.video != null) {
+      final String codec = media.video!.codec;
+      final bool present = codec == "av1"
+          ? HardwareProfile.current.av1Decode
+          : (codec == "hevc" || codec == "h265" || codec == "h264" || codec == "avc");
+      if (!present) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "Hardware decode is not available for this source. The job will use software decode.",
+              "这个源没有可用的硬件解码。任务会使用软件解码。",
+            ),
+            blocking: false,
+          ),
+        );
+      }
+    }
+    if (hardwareAcceleration == HardwareAcceleration.mediaCodec &&
+        videoCodec == VideoCodec.av1) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "AV1 has no MediaCodec encoder on the phones this build targets. The job stays on libaom software encoding; hardware mode only accelerates H.264 / H.265.",
+            "这版覆盖的手机上没有可用的 AV1 MediaCodec 编码器。任务仍走 libaom 软件编码；硬件模式只加速 H.264 / H.265。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (hardwareAcceleration == HardwareAcceleration.mediaCodec &&
+        (videoCodec == VideoCodec.h264 || videoCodec == VideoCodec.h265) &&
+        (pixelDepth.bits ?? media.video?.bitDepth ?? 8) > 8) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "MediaCodec 10-bit output depends on the phone's encoder. If it refuses, switch to CPU or 8-bit.",
+            "MediaCodec 的 10-bit 输出取决于手机编码器。如果被拒绝，切回 CPU 或 8-bit。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (threadLimit == 1) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "One thread keeps the phone responsive but can be extremely slow. It is useful only for a small file or a long background job.",
+            "单线程能让手机保持响应，但会非常慢。只适合小文件或长时间后台任务。",
+          ),
+          blocking: false,
+        ),
+      );
+    } else if (threadLimit >= 6) {
+      issues.add(
+        RecipeIssue(
+          S.t(
+            "Six to eight threads can starve the foreground app. The point of a background queue is to leave room for other work; use 1–4 unless you know the phone can spare it.",
+            "6 到 8 线程会抢前台资源。后台队列本来就是为了留出余量，除非确定手机扛得住，建议 1–4。",
+          ),
+          blocking: false,
+        ),
+      );
+    }
+    if (videoCodec == VideoCodec.av1) {
+      if (targetHeight > 1080) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "AV1 software encoding is extremely slow on phones. 1080p or lower is the practical target; 4K may take hours.",
+              "AV1 软件编码在手机上非常慢。1080p 及以下比较现实，4K 可能要跑几个小时。",
+            ),
+            blocking: false,
+          ),
+        );
+      } else if (media.video != null &&
+          media.video!.height > 1080 &&
+          targetHeight == 0) {
+        issues.add(
+          RecipeIssue(
+            S.t(
+              "The source is above 1080p and AV1 will keep that height. Consider 1080p for a usable encode time.",
+              "源高于 1080p，AV1 会按原高度编码。想要可接受的耗时，建议选 1080p。",
+            ),
+            blocking: false,
+          ),
+        );
+      }
     }
     if (targetHeight == 1220) {
       issues.add(
@@ -721,7 +1162,7 @@ class ConversionRecipe {
       return container == TargetContainer.mkv ||
           container == TargetContainer.webm;
     }
-    if (normalized == "av1") {
+    if (normalized == "av1" || normalized == "libaom-av1") {
       return container == TargetContainer.mp4 ||
           container == TargetContainer.mkv ||
           container == TargetContainer.webm;

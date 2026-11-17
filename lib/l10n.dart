@@ -60,6 +60,10 @@ class AppPreferences {
   static ThemeMode themeMode = ThemeMode.system;
   static Color seed = const Color(0xFF0F5F66);
   static bool experimentalFrameRates = false;
+  static bool hardwareEncoding = false;
+  static bool backgroundMode = false;
+  static int threadLimit = 0;
+  static int memoryBudgetMb = 0;
 
   static Future<void> load() async {
     try {
@@ -75,6 +79,10 @@ class AppPreferences {
       final int? storedSeed = prefs.getInt("accentSeed");
       if (storedSeed != null) seed = Color(storedSeed);
       experimentalFrameRates = prefs.getBool("experimentalFrameRates") ?? false;
+      hardwareEncoding = prefs.getBool("hardwareEncoding") ?? false;
+      backgroundMode = prefs.getBool("backgroundMode") ?? false;
+      threadLimit = prefs.getInt("threadLimit") ?? 0;
+      memoryBudgetMb = prefs.getInt("memoryBudgetMb") ?? 0;
     } catch (_) {}
   }
 
@@ -112,6 +120,48 @@ class AppPreferences {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool("experimentalFrameRates", value);
+    } catch (_) {}
+  }
+
+  static Future<void> setHardwareEncoding(bool value) async {
+    if (hardwareEncoding == value) return;
+    hardwareEncoding = value;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool("hardwareEncoding", value);
+    } catch (_) {}
+  }
+
+  static Future<void> setBackgroundMode(bool value) async {
+    if (backgroundMode == value) return;
+    backgroundMode = value;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool("backgroundMode", value);
+    } catch (_) {}
+  }
+
+  static Future<void> setThreadLimit(int value) async {
+    final int next = value.clamp(0, 8);
+    if (threadLimit == next) return;
+    threadLimit = next;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt("threadLimit", next);
+    } catch (_) {}
+  }
+
+  static Future<void> setMemoryBudgetMb(int value) async {
+    final int next = value <= 0 ? 0 : value.clamp(512, 4096);
+    if (memoryBudgetMb == next) return;
+    memoryBudgetMb = next;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt("memoryBudgetMb", next);
     } catch (_) {}
   }
 }

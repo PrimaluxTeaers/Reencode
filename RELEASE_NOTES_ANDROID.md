@@ -6,7 +6,7 @@
 最低系统：Android 7.0（API 24）  
 包名：`com.teacers.reencode`  
 版本：1.6.0，versionCode 3600  
-SHA-256：`fe2364f727e774a8c1cc8daa5450ec62228cd3045b6246ff26c47a3c8104ec05`
+SHA-256：`6a4c9af8b3507e25f2f1e03a0f86085404188098e2ab544d27ef11a56a643d66`
 
 1.6 是新基线。1.5 及更早的 Release、tag 和旧文档入口已清理。
 
@@ -27,7 +27,7 @@ Installer: `Reencode-AndroidARM64-v8a.apk`
 Minimum Android 7.0 (API 24)  
 Package: `com.teacers.reencode`  
 Version: 1.6.0, versionCode 3600  
-SHA-256: `fe2364f727e774a8c1cc8daa5450ec62228cd3045b6246ff26c47a3c8104ec05`
+SHA-256: `6a4c9af8b3507e25f2f1e03a0f86085404188098e2ab544d27ef11a56a643d66`
 
 1.6 is the new baseline. Releases, tags and old documentation entry points from 1.5 and earlier were removed.
 
