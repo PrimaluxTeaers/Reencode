@@ -18,7 +18,9 @@ jobs:
           find windows -type f -maxdepth 2 -printf '%p %s bytes\n'
 
       - name: Download Android APK
-        run: curl -L --fail --retry 3 -o Reencode-AndroidARM64-v8a-1.6.0.apk https://aka.doubaocdn.com/s/vDdGC0Ergq
+        run: |
+          curl --http1.1 -L --fail --retry 8 --retry-all-errors --retry-delay 3 -C - -o Reencode-AndroidARM64-v8a-1.6.0.apk https://aka.doubaocdn.com/s/vDdGC0Ergq
+          test "$(stat -c%s Reencode-AndroidARM64-v8a-1.6.0.apk)" -eq 30526214
 
       - name: Upload assets to v1.6.0
         env:
