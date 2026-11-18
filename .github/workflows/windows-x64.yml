@@ -48,6 +48,21 @@ jobs:
           Copy-Item "assets/icons/reencode.ico" "windows/runner/resources/app_icon.ico" -Force
           Get-Item "windows/runner/resources/app_icon.ico" | Select-Object Name, Length
 
+      - name: Set desktop window title and executable name
+        shell: pwsh
+        run: |
+          $main = "windows/runner/main.cpp"
+          $text = Get-Content $main -Raw
+          $text = $text -replace 'Win32Window::Size size\(1280, 720\);', 'Win32Window::Size size(1180, 820);'
+          $text = $text -replace 'window\.Create\(L"reencode"', 'window.Create(L"Reencode"'
+          Set-Content $main $text -NoNewline
+
+          $rc = "windows/runner/Runner.rc"
+          $rcText = Get-Content $rc -Raw
+          $rcText = $rcText -replace 'VALUE "FileDescription", "reencode"', 'VALUE "FileDescription", "Reencode"'
+          $rcText = $rcText -replace 'VALUE "ProductName", "reencode"', 'VALUE "ProductName", "Reencode"'
+          Set-Content $rc $rcText -NoNewline
+
       - name: Resolve packages
         shell: bash
         run: flutter pub get
@@ -74,6 +89,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$out/ffmpeg" | Out-Null
           Copy-Item "windows/ffmpeg/ffmpeg.exe" "$out/ffmpeg/"
           Copy-Item "windows/ffmpeg/ffprobe.exe" "$out/ffmpeg/"
+          if (Test-Path "$out/reencode.exe") { Rename-Item "$out/reencode.exe" "Reencode.exe" -Force }
           Get-ChildItem $out | Select-Object Name, Length
 
       - name: Package
@@ -88,17 +104,11 @@ jobs:
           path: Reencode-WindowsX86-64-1.6.0.zip
           retention-days: 30
 
-      - name: Publish Windows release
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/windows-port'
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          tag_name: windows-v1.6.0
-          name: Reencode 1.6.0 — Windows x86-64
-          body: |
-            Windows x86-64 build for Reencode 1.6.0.
-
-            This package is the full Windows runner directory with ffmpeg.exe and ffprobe.exe bundled under `ffmpeg/`. It targets Windows 10/11 x64 only; Win7/8/8.1 are not included. Hardware encoding uses NVENC / AMF when detected, and falls back to the CPU if the encoder rejects the job. AV1 export is software-only and marked experimental.
-          files: Reencode-WindowsX86-64-1.6.0.zip
-          fail_on_unmatched_files: true
-          prerelease: false
-          make_latest: false
+      - name: Replace the 1.6.0 Windows asset
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/windows-port'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v1.6.0
+          gh release upload v1.6.0 "Reencode-WindowsX86-64-1.6.0.zip" --clobber
