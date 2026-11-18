@@ -45,3 +45,11 @@ SHA-256: `55ac29bd3d1bf0ca9cc98ac6f2c4387fa7c889587170fb99e01194431bcebe28`; 30,
 - The completion bar disappears; the result card collapses to a summary after a delay and expands or collapses immediately when tapped.
 
 Known limits: the MediaCodec hardware path has not been verified on a physical phone in this round; a phone may reject 10-bit or certain resolutions. The memory cap does not stop Android from killing the process and does not request vendor virtual RAM. Only the first video stream and all audio streams are processed; subtitles, attachments and multiple video tracks are not copied.
+
+## 平台支持
+
+官方只发布 Android arm64-v8a。Windows 构建已经放弃：曾经认真尝试过，受限于设备和验证条件，最终没有继续。仓库保留共享的 Flutter / Dart 逻辑，熟悉 Windows 构建的人可以自行生成 runner 并适配；官方不提供成品、不维护，也不为第三方构建背书。
+
+## Platform support
+
+Android arm64-v8a is the only official build. The Windows build was attempted in earnest and then dropped because the devices and verification conditions were not there. The shared Flutter / Dart logic stays in the repository so someone with Windows build experience can generate a runner and adapt it; the project does not ship, maintain or endorse third-party builds.

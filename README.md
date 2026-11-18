@@ -4,9 +4,9 @@ Reencode 是一个离线视频转码工具。它把码率、编码、容器、�
 
 ## 关于这个项目
 
-Reencode / 视频转码 是免费开源的离线工具，任何人都可以免费使用、修改、分发和自行构建，只要遵守 GPL-3.0。也完全允许其他人基于它做同类软件或另起分支；比起复制一个成品，更希望这套代码能让人自己搭出能用的版本。项目由多个现成组件拼装而成，作者本人也是被“找不到能用的转码工具、专业软件又太贵”困住的人。测试设备有限，遇到 bug 请见谅，也欢迎提交问题。没有把 Reencode 和 Timbre 合并成一个大型项目的打算，两个都只是小工具；更新完全随缘，能走到 1.6 靠的是想把它们做完整一点的心。
+Reencode / 视频转码 是免费开源的离线工具，任何人都可以免费使用、修改、分发和自行构建，只要遵守 GPL-3.0。也完全允许其他人基于它做同类软件或另起分支；比起复制一个成品，更希望这套代码能让人自己搭出能用的版本。项目由多个现成组件拼装而成，作者本人也是被“找不到能用的转码工具、专业软件又太贵”困住的人。测试设备有限，遇到 bug 请见谅，也欢迎提交问题。没有把 Reencode 和 Timbre 合并成一个大型项目的打算，两个都只是小工具；更新完全随缘，能走到 1.6 靠的是想把它们做完整一点的心。曾经认真尝试过 Windows 构建，受限于设备和实际条件，最终放弃；与其发一个自己无法验证的包，不如把边界说清楚。
 
-Android 版只出 arm64-v8a，应用名显示为 **Reencode**，安装包文件名保留 `ARM64-v8a` 标识，包名 `com.teacers.reencode`。Windows 版随 1.6 一起构建，应用名为 **Reencode**，安装包命名为 `Reencode-WindowsX86-64`，只面向 Windows 10 / 11 x64；Windows 和 Android 共用仓库里同一套 Flutter 源码，Windows runner 由 GitHub Actions 的 x64 runner 生成并打包，和 Android APK 放在同一个 v1.6.0 发行版。
+Android 版只出 arm64-v8a，应用名显示为 **Reencode**，安装包文件名保留 `ARM64-v8a` 标识，包名 `com.teacers.reencode`。官方只发布 Android 版，不再构建、不再发布 Windows 包。仓库保留不依赖 Android 界面的 Flutter / Dart 逻辑，熟悉 Windows 构建的人可以自行生成 runner、补平台层并适配；这条路由第三方自行维护，官方不提供成品，也不为适配结果背书。
 
 1.6 是当前基线。1.5 及更早的 Release、tag 和旧文档入口已经清理，旧版本不作为可用版本保留。
 
@@ -82,7 +82,7 @@ flutter build apk --release --target-platform android-arm64 --split-per-abi
 
 FFmpegKit Flutter 包放在 `third_party/ffmpeg_kit_flutter_new`。这是上游 4.6.8 的副本，Dart 接口和原生代码没改，只改了 `android/build.gradle` 的 AGP 版本和仓库地址，让它在当前 Flutter / Gradle 组合里能构建。升级 Flutter、AGP 或 Gradle 前先检查这个文件。
 
-Windows 构建由 `.github/workflows/windows-x64.yml` 在 `windows-latest` 上生成 `windows/` runner，并打包 `Reencode-WindowsX86-64-1.6.0.zip`；本地不交叉编译 Windows 产物。
+官方不提供 Windows 构建。仓库保留共享的 `lib/` 逻辑，方便有 Windows 设备和维护能力的人自行生成 runner、补平台层并适配；官方不生成、不提交、也不维护 Windows runner。
 
 ## 许可
 
@@ -114,7 +114,7 @@ flutter analyze lib test
 flutter test
 ```
 
-`lib/models.dart` 放媒体摘要、编码 / 容器枚举、配方和预检；`lib/command_builder.dart` 只生成 FFmpeg 参数；`lib/engine.dart` 负责 FFprobe、FFmpeg 执行、进度和取消；`lib/hardware_profile.dart` 放硬件能力读取；`lib/gallery_picker.dart` 放 Android 相册入口；`lib/media_tools.dart` 放合并、分离和轻量音频；`lib/bounded_number_field.dart` 管有上下限的整数输入，`lib/frame_rate_field.dart` 管帧率固定档和 144 解锁；`lib/codec_details.dart` 放编码详情文案。参数规则可以单独测试，不需要加载 native 库。Windows 与 Android 共用这些 `lib/` 文件；`windows/` runner 由 CI 用 `flutter create` 生成，不提交生成物。
+`lib/models.dart` 放媒体摘要、编码 / 容器枚举、配方和预检；`lib/command_builder.dart` 只生成 FFmpeg 参数；`lib/engine.dart` 负责 FFprobe、FFmpeg 执行、进度和取消；`lib/hardware_profile.dart` 放硬件能力读取；`lib/gallery_picker.dart` 放 Android 相册入口；`lib/media_tools.dart` 放合并、分离和轻量音频；`lib/bounded_number_field.dart` 管有上下限的整数输入，`lib/frame_rate_field.dart` 管帧率固定档和 144 解锁；`lib/codec_details.dart` 放编码详情文案。参数规则可以单独测试，不需要加载 native 库。这些 `lib/` 文件不绑定 Android 界面，保留给愿意自行做 Windows 或其他桌面适配的人；官方不生成、不提交也不维护 Windows runner。
 
 ---
 
@@ -124,9 +124,9 @@ Reencode is an offline video converter. Bitrate, codec, container, resolution an
 
 ## About
 
-Reencode / Video Transcoder is a free, open-source offline tool. Anyone may use, modify, redistribute and build it, provided the GPL-3.0 license is respected. Other people are free to make similar apps or fork this one; the point is not to ship one perfect binary, but to let people build their own working version. It is assembled from existing components, and the author is one of the people who could not find a usable transcoder and could not afford professional software. Testing has been limited to a small set of devices, so bugs are possible; reports are welcome. There is no plan to merge Reencode and Timbre into one large project. Both are small tools, updated irregularly; reaching 1.6 is simply the wish to make them a little more complete.
+Reencode / Video Transcoder is a free, open-source offline tool. Anyone may use, modify, redistribute and build it, provided the GPL-3.0 license is respected. Other people are free to make similar apps or fork this one; the point is not to ship one perfect binary, but to let people build their own working version. It is assembled from existing components, and the author is one of the people who could not find a usable transcoder and could not afford professional software. Testing has been limited to a small set of devices, so bugs are possible; reports are welcome. There is no plan to merge Reencode and Timbre into one large project. Both are small tools, updated irregularly; reaching 1.6 is simply the wish to make them a little more complete. A Windows build was attempted in earnest, but without the devices and verification conditions to stand behind it, it was abandoned; saying so is better than shipping an untested package.
 
-The Android build ships arm64-v8a only, shows **Reencode** as its name and uses `com.teacers.reencode`; only the installer filename keeps the `ARM64-v8a` tag. The Windows build uses the installer name `Reencode-WindowsX86-64` and targets Windows 10 / 11 x64 only. Windows and Android share the same Flutter source in this repository; the Windows runner is generated and packed on the `windows-latest` runner, then published in the same v1.6.0 release as the Android APK.
+The Android build ships arm64-v8a only, shows **Reencode** as its name and uses `com.teacers.reencode`; only the installer filename keeps the `ARM64-v8a` tag. Android is the only official target. The Windows build has been dropped: no Windows package is built or published. The repository keeps the Flutter / Dart logic that does not depend on the Android UI, so anyone with Windows build experience can generate a runner, fill in the platform layer and adapt it; that path is maintained by whoever builds it, not by this project, and the project does not endorse third-party builds.
 
 1.6 is the current baseline. Releases, tags and old documentation entry points from 1.5 and earlier were removed; older builds are not kept as usable versions.
 
@@ -202,7 +202,7 @@ flutter build apk --release --target-platform android-arm64 --split-per-abi
 
 The FFmpegKit Flutter package lives in `third_party/ffmpeg_kit_flutter_new`. It is a copy of upstream 4.6.8 with no changes to the Dart API or native code. Only `android/build.gradle` was changed: the AGP version and repository list, so it builds with the current Flutter / Gradle combination. Check that file before upgrading Flutter, AGP or Gradle.
 
-The Windows build runs `.github/workflows/windows-x64.yml` on `windows-latest`, generating the `windows/` runner from the same repository and packing `Reencode-WindowsX86-64-1.6.0.zip`. There is no closed-source desktop module; FFmpeg binaries are fetched at build time so the repository stays text-only.
+There is no official Windows build. The shared `lib/` logic stays in the repository so someone with Windows hardware and maintenance capacity can generate a runner, fill in the platform layer and adapt it; the project does not generate, commit or maintain a Windows runner.
 
 ## License
 
@@ -235,4 +235,4 @@ flutter analyze lib test
 flutter test
 ```
 
-`lib/models.dart` holds media summaries, codec / container enums, recipes and preflight checks; `lib/command_builder.dart` only builds FFmpeg arguments; `lib/engine.dart` handles FFprobe, FFmpeg execution, progress and cancellation; `lib/hardware_profile.dart` holds hardware capability reads; `lib/gallery_picker.dart` holds the Android gallery entry; `lib/media_tools.dart` holds merge, split and lightweight audio; `lib/bounded_number_field.dart` owns bounded integer input and `lib/frame_rate_field.dart` owns the fixed frame-rate stops and 144 unlock; `lib/codec_details.dart` holds the codec detail copy. Windows and Android share these `lib/` files; the `windows/` runner is generated by `flutter create` in CI and is not committed as a generated tree.
+`lib/models.dart` holds media summaries, codec / container enums, recipes and preflight checks; `lib/command_builder.dart` only builds FFmpeg arguments; `lib/engine.dart` handles FFprobe, FFmpeg execution, progress and cancellation; `lib/hardware_profile.dart` holds hardware capability reads; `lib/gallery_picker.dart` holds the Android gallery entry; `lib/media_tools.dart` holds merge, split and lightweight audio; `lib/bounded_number_field.dart` owns bounded integer input and `lib/frame_rate_field.dart` owns the fixed frame-rate stops and 144 unlock; `lib/codec_details.dart` holds the codec detail copy. These `lib/` files are not tied to the Android UI and remain available to anyone adapting the app to Windows or another desktop target; the project does not generate, commit or maintain a Windows runner.

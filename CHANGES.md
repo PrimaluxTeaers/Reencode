@@ -21,7 +21,7 @@
 - HDR10、HDR10+、杜比视界统一归入“HDR 保留”说明；音频多轨在转码时保留，常用格式保留 AAC / MP4A、MP3、Opus、FLAC、WAV。
 - 完成条会消失，结果卡延迟收成摘要，点击立即收起或展开。
 - 应用图标换成新版的深青底、薄荷青双向箭头与胶片框；桌面、启动器和自适应前景使用同一张原图。
-- Windows 1.6 接入 NVENC / AMF 检测、CPU/GPU/线程面板、固定快捷键和前台窗口约束；正式包由 GitHub Actions 的 Windows x64 runner 构建。
+- 官方平台范围收窄到 Android：Windows 构建认真尝试过，受限于设备和验证条件，最终放弃；不再发布 Windows 包，仓库保留共享逻辑供他人自行适配。
 - 测试增加到 30 项，覆盖自定义分辨率、奇数尺寸拒绝、硬件不可用回退和内存队列；arm64 APK 30,526,214 字节，SHA-256 `6a4c9af8b3507e25f2f1e03a0f86085404188098e2ab544d27ef11a56a643d66`。
 
 ### English
@@ -43,5 +43,5 @@
 - HDR10, HDR10+ and Dolby Vision are grouped under "HDR preservation". Multiple audio tracks are preserved when re-encoding; common formats keep AAC / MP4A, MP3, Opus, FLAC and WAV.
 - The completion bar disappears; the result card collapses to a summary after a delay and expands or collapses immediately when tapped.
 - The launcher icon now uses the new deep-teal artwork with mint bidirectional arrows and a film frame; desktop, launcher and adaptive foreground share the same source.
-- Windows 1.6 adds NVENC / AMF detection, CPU/GPU/thread panels, fixed shortcuts and a foreground-window constraint; the package is built on GitHub Actions' Windows x64 runner.
+- Official platform support is Android only. The Windows build was attempted in earnest and dropped because the devices and verification conditions were not available; no Windows package is published, and the shared logic stays in the repository for others to adapt.
 - Tests grew to 30, covering custom size, odd-size rejection, hardware fallback and the memory queue. The arm64 APK is 30,526,214 bytes, SHA-256 `6a4c9af8b3507e25f2f1e03a0f86085404188098e2ab544d27ef11a56a643d66`.
