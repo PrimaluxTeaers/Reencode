@@ -5,7 +5,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:label="Reencode 64 位"
+        android:label="Reencode"
         android:name="${applicationName}"
         android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"

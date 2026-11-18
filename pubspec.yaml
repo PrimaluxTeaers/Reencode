@@ -1,5 +1,5 @@
 name: reencode
-description: "Reencode — video bitrate, codec and container conversion for Android."
+description: "Reencode — offline video bitrate, codec and container conversion for Android and Windows."
 publish_to: "none"
 version: 1.6.0+1600
 

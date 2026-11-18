@@ -72,7 +72,8 @@ void main() {
     final List<String> video = splitVideoArgs(
       "/tmp/in.mp4",
       "/tmp/v.mp4",
-      target: SplitVideoTarget.h264Mp4,
+      copyVideo: false,
+      codec: VideoCodec.h264,
     );
     expect(video, containsAllInOrder(<String>["-c:v", "libx264"]));
     expect(video, containsAllInOrder(<String>["-crf", "20"]));

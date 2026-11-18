@@ -11,7 +11,6 @@ import "package:ffmpeg_kit_flutter_new/statistics.dart";
 
 import "command_builder.dart";
 import "engine_windows.dart";
-import "hardware_profile.dart";
 import "models.dart";
 
 class ProbeException implements Exception {

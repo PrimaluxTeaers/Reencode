@@ -11,9 +11,12 @@ import "package:share_plus/share_plus.dart";
 import "background_progress.dart";
 import "dialogs.dart";
 import "codec_details.dart";
+import "frame_rate_field.dart";
 import "engine.dart";
+import "font_manager.dart";
 import "gallery_picker.dart";
 import "hardware_profile.dart";
+import "haptics.dart";
 import "l10n.dart";
 import "media_tools.dart";
 import "models.dart";
@@ -26,6 +29,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await S.load();
   await AppPreferences.load();
+  await FontManager.load();
   await HardwareProfile.load();
   runApp(const ReencodeApp());
 }
@@ -43,12 +47,14 @@ class _ReencodeAppState extends State<ReencodeApp> {
     super.initState();
     S.revision.addListener(_rebuild);
     AppPreferences.revision.addListener(_rebuild);
+    FontManager.revision.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     S.revision.removeListener(_rebuild);
     AppPreferences.revision.removeListener(_rebuild);
+    FontManager.revision.removeListener(_rebuild);
     super.dispose();
   }
 
@@ -59,10 +65,18 @@ class _ReencodeAppState extends State<ReencodeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "Reencode 64 位",
+      title: "Reencode",
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(Brightness.light, AppPreferences.seed),
-      darkTheme: buildAppTheme(Brightness.dark, AppPreferences.seed),
+      theme: buildAppTheme(
+        Brightness.light,
+        AppPreferences.seed,
+        fontFamily: FontManager.family,
+      ),
+      darkTheme: buildAppTheme(
+        Brightness.dark,
+        AppPreferences.seed,
+        fontFamily: FontManager.family,
+      ),
       themeMode: AppPreferences.themeMode,
       home: const HomePage(),
     );
@@ -403,7 +417,7 @@ class _HomePageState extends State<HomePage> {
             S.t("$completed file(s) finished.", "已完成 $completed 个文件。"),
             duration: const Duration(seconds: 2),
           );
-          HapticFeedback.mediumImpact();
+          Haptics.mediumImpact();
         }
       }
     }
@@ -1112,7 +1126,7 @@ class _HomePageState extends State<HomePage> {
                 borderRadius: BorderRadius.circular(16),
                 onTap: job.hasOutputFolder
                     ? () {
-                        HapticFeedback.selectionClick();
+                        Haptics.selectionClick();
                         _removeJob(job);
                       }
                     : null,
@@ -1160,7 +1174,7 @@ class _HomePageState extends State<HomePage> {
                       if (job.hasOutputFolder)
                         FilledButton.tonalIcon(
                           onPressed: () {
-                            HapticFeedback.selectionClick();
+                            Haptics.selectionClick();
                             _removeJob(job);
                           },
                           icon: const Icon(Icons.check_rounded, size: 18),
@@ -1356,11 +1370,34 @@ class RecipeCard extends StatefulWidget {
 class _RecipeCardState extends State<RecipeCard> {
   late final TextEditingController _videoBitrate;
   late final TextEditingController _audioBitrate;
+  late final FocusNode _videoBitrateFocus;
+  late final FocusNode _audioBitrateFocus;
   bool _useMbps = false;
-  bool _showSlider = false;
   bool _showAdvanced = false;
-  bool _fps144Unlocked = false;
-  int _tap120 = 0;
+
+  static const List<int> _videoBitrateStops = <int>[
+    1,
+    10,
+    50,
+    100,
+    250,
+    500,
+    750,
+    1000,
+    1500,
+    2000,
+    3000,
+    4000,
+    6000,
+    8000,
+    10000,
+    15000,
+    20000,
+    30000,
+    50000,
+    80000,
+    100000,
+  ];
 
   @override
   void initState() {
@@ -1372,14 +1409,28 @@ class _RecipeCardState extends State<RecipeCard> {
     _audioBitrate = TextEditingController(
       text: "${widget.recipe.audioBitrateKbps}",
     );
+    _videoBitrateFocus = FocusNode()..addListener(_onVideoFocus);
+    _audioBitrateFocus = FocusNode()..addListener(_onAudioFocus);
   }
 
   @override
   void dispose() {
     AppPreferences.revision.removeListener(_onPreferencesChanged);
+    _videoBitrateFocus.removeListener(_onVideoFocus);
+    _audioBitrateFocus.removeListener(_onAudioFocus);
+    _videoBitrateFocus.dispose();
+    _audioBitrateFocus.dispose();
     _videoBitrate.dispose();
     _audioBitrate.dispose();
     super.dispose();
+  }
+
+  void _onVideoFocus() {
+    if (!_videoBitrateFocus.hasFocus) _commitVideoBitrate();
+  }
+
+  void _onAudioFocus() {
+    if (!_audioBitrateFocus.hasFocus) _commitAudioBitrate();
   }
 
   void _onPreferencesChanged() {
@@ -1414,18 +1465,44 @@ class _RecipeCardState extends State<RecipeCard> {
     final double? value = double.tryParse(text.trim());
     if (value == null || value <= 0) return null;
     final int kbps = (_useMbps ? value * 1000 : value).round();
-    if (kbps < 1 || kbps > 100000) return null;
-    return kbps;
+    return kbps.clamp(1, 100000);
+  }
+
+  int _nearestBitrateStop(int kbps) {
+    int best = 0;
+    for (int i = 1; i < _videoBitrateStops.length; i++) {
+      if ((_videoBitrateStops[i] - kbps).abs() <
+          (_videoBitrateStops[best] - kbps).abs()) {
+        best = i;
+      }
+    }
+    return best;
   }
 
   void _toggleBitrateUnit() {
+    _commitVideoBitrate();
     setState(() => _useMbps = !_useMbps);
     _videoBitrate.text = _formatVideoBitrate(widget.recipe.videoBitrateKbps);
   }
 
-  void _setVideoBitrateFromText(String text) {
-    final int? parsed = _parseVideoBitrate(text);
-    if (parsed != null) _setVideoBitrate(parsed);
+  void _commitVideoBitrate() {
+    final int? parsed = _parseVideoBitrate(_videoBitrate.text);
+    if (parsed != null) {
+      _setVideoBitrate(parsed);
+    } else {
+      _videoBitrate.text = _formatVideoBitrate(
+        widget.recipe.videoBitrateKbps,
+      );
+    }
+  }
+
+  void _commitAudioBitrate() {
+    final int? parsed = int.tryParse(_audioBitrate.text.trim());
+    if (parsed == null) {
+      _audioBitrate.text = "${widget.recipe.audioBitrateKbps}";
+      return;
+    }
+    _setAudioBitrate(parsed);
   }
 
   void _setMode(WorkMode mode) {
@@ -1466,21 +1543,36 @@ class _RecipeCardState extends State<RecipeCard> {
     widget.onChanged(recipe);
   }
 
-  void _setVideoBitrate(int value) {
+  void _setVideoBitrate(int value, {bool syncText = true}) {
     if (!widget.enabled) return;
-    widget.onChanged(widget.recipe.copyWith(videoBitrateKbps: value));
+    final int next = value.clamp(1, 100000);
+    if (syncText) {
+      final String text = _formatVideoBitrate(next);
+      if (_videoBitrate.text != text) {
+        _videoBitrate.value = TextEditingValue(
+          text: text,
+          selection: TextSelection.collapsed(offset: text.length),
+        );
+      }
+    }
+    widget.onChanged(widget.recipe.copyWith(videoBitrateKbps: next));
   }
 
   void _setAudioBitrate(int value) {
     if (!widget.enabled) return;
-    widget.onChanged(widget.recipe.copyWith(audioBitrateKbps: value));
+    final int next = value.clamp(8, 512);
+    final String text = "$next";
+    if (_audioBitrate.text != text) {
+      _audioBitrate.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    widget.onChanged(widget.recipe.copyWith(audioBitrateKbps: next));
   }
-
-  bool get _experimentalFps => AppPreferences.experimentalFrameRates;
 
   void _setFrameRateMode(FrameRateMode mode) {
     if (!widget.enabled) return;
-    _tap120 = 0;
     widget.onChanged(
       widget.recipe.copyWith(
         frameRateMode: mode,
@@ -1491,42 +1583,9 @@ class _RecipeCardState extends State<RecipeCard> {
     );
   }
 
-  void _selectFps(int fps) {
-    if (!widget.enabled) return;
-    if (fps == 144 && !_fps144Unlocked) return;
-    if (fps == 120) {
-      _tap120++;
-      if (_tap120 >= 4) {
-        _tap120 = 0;
-        widget.onChanged(widget.recipe.copyWith(targetFps: 120));
-        unawaited(_unlock144());
-        return;
-      }
-    } else {
-      _tap120 = 0;
-    }
-    widget.onChanged(widget.recipe.copyWith(targetFps: fps));
-  }
-
-  Future<void> _unlock144() async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext ctx) => AppDialog(
-        icon: Icons.warning_amber_rounded,
-        title: S.t("Unlock 144 fps?", "解锁 144 帧？"),
-        message: S.t(
-          "144 fps is a low-level experimental target. It only repeats or drops frames; it does not interpolate. Many phones will overheat, stutter, or fail. Use it for short tests only.",
-          "144 帧属于底层实验档。它只补重复帧或丢帧，不做插帧。很多手机会发热、卡顿甚至失败。只建议短片段测试。",
-        ),
-        secondaryLabel: S.t("Not now", "暂不"),
-        secondaryResult: false,
-        primaryLabel: S.t("Unlock", "解锁"),
-        primaryResult: true,
-      ),
-    );
-    if (confirmed == true && mounted) {
-      setState(() => _fps144Unlocked = true);
-    }
+  int _evenClampedDimension(int value) {
+    final int clamped = value.clamp(16, 7680);
+    return clamped.isOdd ? clamped - 1 : clamped;
   }
 
   Future<void> _pickCustomSize() async {
@@ -1538,69 +1597,89 @@ class _RecipeCardState extends State<RecipeCard> {
           ? "${widget.recipe.targetHeight}"
           : "",
     );
+    String? error;
     final List<int>? value = await showDialog<List<int>>(
       context: context,
-      builder: (BuildContext ctx) => AlertDialog(
-        title: Text(S.t("Custom size", "自定义分辨率")),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: width,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: <TextInputFormatter>[
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: const InputDecoration(labelText: "Width"),
+      builder: (BuildContext ctx) => StatefulBuilder(
+        builder: (BuildContext ctx, StateSetter setLocal) => AlertDialog(
+          title: Text(S.t("Custom size", "自定义分辨率")),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextField(
+                      controller: width,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                      decoration: const InputDecoration(labelText: "Width"),
+                    ),
                   ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10),
-                  child: Text("×"),
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: height,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: <TextInputFormatter>[
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    decoration: const InputDecoration(labelText: "Height"),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("×"),
                   ),
+                  Expanded(
+                    child: TextField(
+                      controller: height,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                      decoration: const InputDecoration(labelText: "Height"),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                S.t(
+                  "16–7680 per side. Out-of-range values are clamped, odd values become even. Pixel density is a display setting and is not written here.",
+                  "单边 16–7680。超出范围会自动卡到上下限，奇数会自动减 1 变成偶数。像素密度属于显示层，这里不写。",
+                ),
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.error),
                 ),
               ],
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(S.t("Cancel", "取消")),
             ),
-            const SizedBox(height: 10),
-            Text(
-              S.t(
-                "Exact output pixels, both sides. Even numbers only; 16–7680 per side. Pixel density is a display setting and is not written here.",
-                "直接写输出像素的宽和高。只收偶数，单边 16–7680。像素密度属于显示层，这里不写。",
-              ),
-              style: Theme.of(ctx).textTheme.bodySmall,
+            FilledButton(
+              onPressed: () {
+                final int? w = int.tryParse(width.text.trim());
+                final int? h = int.tryParse(height.text.trim());
+                if (w == null || h == null || w <= 0 || h <= 0) {
+                  setLocal(() {
+                    error = S.t(
+                      "Fill both width and height with whole numbers.",
+                      "宽度和高度都要填整数。",
+                    );
+                  });
+                  return;
+                }
+                Navigator.of(ctx).pop(<int>[
+                  _evenClampedDimension(w),
+                  _evenClampedDimension(h),
+                ]);
+              },
+              child: Text(S.t("Use size", "使用")),
             ),
           ],
         ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(S.t("Cancel", "取消")),
-          ),
-          FilledButton(
-            onPressed: () {
-              final int? w = int.tryParse(width.text.trim());
-              final int? h = int.tryParse(height.text.trim());
-              if (w == null || h == null) {
-                Navigator.of(ctx).pop();
-                return;
-              }
-              Navigator.of(ctx).pop(<int>[w, h]);
-            },
-            child: Text(S.t("Use size", "使用")),
-          ),
-        ],
       ),
     );
     width.dispose();
@@ -1661,7 +1740,10 @@ class _RecipeCardState extends State<RecipeCard> {
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final MediaSummary? sample = widget.sample;
-    final bool remux = widget.recipe.mode == WorkMode.remux;
+    final WorkMode mode = widget.recipe.mode;
+    final bool remux = mode == WorkMode.remux;
+    final bool showContainer = mode != WorkMode.compress;
+    final bool showAdvanced = mode == WorkMode.custom;
     final bool hasAudio = sample?.hasAudio ?? true;
     final int estimate = sample == null
         ? 0
@@ -1694,21 +1776,18 @@ class _RecipeCardState extends State<RecipeCard> {
             ],
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<WorkMode>(
-              showSelectedIcon: false,
-              segments: WorkMode.values.map((WorkMode mode) {
-                return ButtonSegment<WorkMode>(
-                  value: mode,
-                  icon: Icon(mode.icon, size: 18),
-                  label: Text(mode.label),
-                );
-              }).toList(),
-              selected: <WorkMode>{widget.recipe.mode},
-              onSelectionChanged: (Set<WorkMode> value) =>
-                  _setMode(value.first),
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: WorkMode.values.map((WorkMode value) {
+              final bool selected = widget.recipe.mode == value;
+              return ChoiceChip(
+                selected: selected,
+                onSelected: widget.enabled ? (_) => _setMode(value) : null,
+                avatar: Icon(value.icon, size: 16),
+                label: Text(value.label),
+              );
+            }).toList(),
           ),
           const SizedBox(height: 8),
           Text(
@@ -1716,6 +1795,7 @@ class _RecipeCardState extends State<RecipeCard> {
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
           ),
+          if (showContainer) ...[
           const SizedBox(height: 16),
           _label(scheme, S.t("Container", "容器")),
           const SizedBox(height: 8),
@@ -1741,11 +1821,14 @@ class _RecipeCardState extends State<RecipeCard> {
             style: Theme.of(context).textTheme.labelSmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
           ),
+          ],
           const SizedBox(height: 16),
           AnimatedSize(
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
-            child: remux ? _remuxBody(scheme) : _encodeBody(scheme, hasAudio),
+            child: remux
+                ? _remuxBody(scheme)
+                : _encodeBody(scheme, hasAudio, mode),
           ),
           const SizedBox(height: 14),
           if (widget.issues.isNotEmpty)
@@ -1786,6 +1869,7 @@ class _RecipeCardState extends State<RecipeCard> {
                 ],
               ),
             ),
+          if (showAdvanced) ...[
           const SizedBox(height: 12),
           _advancedHeader(scheme),
           AnimatedSize(
@@ -1798,6 +1882,7 @@ class _RecipeCardState extends State<RecipeCard> {
                   )
                 : const SizedBox.shrink(),
           ),
+          ],
         ],
       ),
     );
@@ -1810,7 +1895,7 @@ class _RecipeCardState extends State<RecipeCard> {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          HapticFeedback.selectionClick();
+          Haptics.selectionClick();
           setState(() => _showAdvanced = !_showAdvanced);
         },
         child: Padding(
@@ -2081,10 +2166,17 @@ class _RecipeCardState extends State<RecipeCard> {
     );
   }
 
-  Widget _encodeBody(ColorScheme scheme, bool hasAudio) {
+  Widget _encodeBody(ColorScheme scheme, bool hasAudio, WorkMode mode) {
+    final bool showCodec = mode != WorkMode.compress;
+    final bool showBitrate = mode == WorkMode.compress || mode == WorkMode.custom;
+    final bool showResolution = mode == WorkMode.custom;
+    final bool showDepth = mode == WorkMode.custom;
+    final bool showFrameRate = mode == WorkMode.custom;
+    final bool showAudio = mode != WorkMode.compress;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (showCodec) ...[
         _label(scheme, S.t("Video codec", "视频编码")),
         const SizedBox(height: 8),
         Wrap(
@@ -2129,6 +2221,8 @@ class _RecipeCardState extends State<RecipeCard> {
           ],
         ),
         const SizedBox(height: 16),
+        ],
+        if (showBitrate) ...[
         _label(scheme, S.t("Video bitrate", "视频码率")),
         const SizedBox(height: 8),
         Row(
@@ -2136,10 +2230,12 @@ class _RecipeCardState extends State<RecipeCard> {
             Expanded(
               child: TextField(
                 controller: _videoBitrate,
+                focusNode: _videoBitrateFocus,
                 enabled: widget.enabled,
                 keyboardType: TextInputType.numberWithOptions(
                   decimal: _useMbps,
                 ),
+                textInputAction: TextInputAction.done,
                 inputFormatters: <TextInputFormatter>[
                   if (_useMbps)
                     FilteringTextInputFormatter.allow(RegExp(r"[0-9.]"))
@@ -2150,7 +2246,10 @@ class _RecipeCardState extends State<RecipeCard> {
                   suffixText: _useMbps ? "Mbps" : "kbps",
                   hintText: _useMbps ? "2" : "2000",
                 ),
-                onChanged: _setVideoBitrateFromText,
+                onSubmitted: (_) {
+                  _commitVideoBitrate();
+                  _videoBitrateFocus.unfocus();
+                },
               ),
             ),
             const SizedBox(width: 6),
@@ -2170,59 +2269,55 @@ class _RecipeCardState extends State<RecipeCard> {
         const SizedBox(height: 8),
         Text(
           S.t(
-            "1–100000 kbps (up to 100 Mbps). Type an exact number, or drag the slider for a rough value. Tap the unit to switch kbps / Mbps.",
-            "1–100000 kbps（最高 100 Mbps）。数字精调，滑块粗调；点单位可在 kbps / Mbps 之间切换。",
+            "Hard range: 1–100000 kbps (up to 100 Mbps). The slider snaps to fixed stops; the number field takes exact values and clamps to the same range. Tap the unit to switch kbps / Mbps.",
+            "硬范围 1–100000 kbps（最高 100 Mbps）。滑块只吸附固定档；数字框可精确输入，超出范围自动卡到上下限。点单位可在 kbps / Mbps 之间切换。",
           ),
           style: Theme.of(context).textTheme.labelSmall
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 4),
-        Row(
-          children: [
-            Text(
-              S.t("Precision", "精确输入"),
-              style: Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: widget.enabled
-                  ? () => setState(() => _showSlider = !_showSlider)
-                  : null,
-              child: Text(
-                _showSlider ? S.t("Hide slider", "收起滑块") : S.t("Slider", "滑块"),
-              ),
-            ),
-          ],
-        ),
-        if (_showSlider)
-          Slider(
-            value: widget.recipe.videoBitrateKbps.clamp(1, 100000).toDouble(),
-            min: 1,
-            max: 100000,
-            divisions: 999,
-            label: _formatVideoBitrate(widget.recipe.videoBitrateKbps),
-            onChanged: widget.enabled
-                ? (double value) => _setVideoBitrate(value.round())
-                : null,
+        Slider(
+          value: _nearestBitrateStop(widget.recipe.videoBitrateKbps).toDouble(),
+          min: 0,
+          max: (_videoBitrateStops.length - 1).toDouble(),
+          divisions: _videoBitrateStops.length - 1,
+          label: _formatVideoBitrate(
+            _videoBitrateStops[_nearestBitrateStop(
+              widget.recipe.videoBitrateKbps,
+            )],
           ),
+          onChanged: widget.enabled
+              ? (double raw) {
+                  final int index = raw.round().clamp(
+                    0,
+                    _videoBitrateStops.length - 1,
+                  );
+                  _setVideoBitrate(_videoBitrateStops[index]);
+                }
+              : null,
+        ),
+        Text(
+          S.t(
+            "Fixed stops: 1 / 10 / 50 / 100 / 250 / 500 / 750 / 1000 / 1500 / 2000 / 3000 / 4000 / 6000 / 8000 / 10000 / 15000 / 20000 / 30000 / 50000 / 80000 / 100000 kbps.",
+            "固定档：1 / 10 / 50 / 100 / 250 / 500 / 750 / 1000 / 1500 / 2000 / 3000 / 4000 / 6000 / 8000 / 10000 / 15000 / 20000 / 30000 / 50000 / 80000 / 100000 kbps。",
+          ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 6),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children:
               <int>[
-                10,
-                50,
                 100,
-                250,
                 500,
                 1000,
                 2000,
                 4000,
-                10000,
+                8000,
                 20000,
-                40000,
-                80000,
+                50000,
                 100000,
               ].map((int value) {
                 return ActionChip(
@@ -2234,6 +2329,8 @@ class _RecipeCardState extends State<RecipeCard> {
               }).toList(),
         ),
         const SizedBox(height: 16),
+        ],
+        if (showResolution) ...[
         _label(scheme, S.t("Resolution", "分辨率")),
         const SizedBox(height: 8),
         Wrap(
@@ -2287,6 +2384,8 @@ class _RecipeCardState extends State<RecipeCard> {
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
+        ],
+        if (showDepth) ...[
         _label(scheme, S.t("Bit depth", "位深")),
         const SizedBox(height: 8),
         Wrap(
@@ -2320,6 +2419,8 @@ class _RecipeCardState extends State<RecipeCard> {
               ?.copyWith(color: scheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
+        ],
+        if (showFrameRate) ...[
         _label(scheme, S.t("Frame rate", "帧率")),
         const SizedBox(height: 8),
         Wrap(
@@ -2346,81 +2447,15 @@ class _RecipeCardState extends State<RecipeCard> {
                 ?.copyWith(color: scheme.onSurfaceVariant),
           )
         else ...[
-          Row(
-            children: [
-              Text(
-                S.t("24–60 fps", "24–60 帧"),
-                style: Theme.of(context).textTheme.labelSmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-              const Spacer(),
-              Text(
-                "${widget.recipe.targetFps.clamp(24, 60)} fps",
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ],
+          FrameRateField(
+            value: widget.recipe.targetFps,
+            enabled: widget.enabled,
+            onChanged: (int fps) =>
+                widget.onChanged(widget.recipe.copyWith(targetFps: fps)),
           ),
-          Slider(
-            value: widget.recipe.targetFps.clamp(24, 60).toDouble(),
-            min: 24,
-            max: 60,
-            divisions: 36,
-            label: "${widget.recipe.targetFps.clamp(24, 60)} fps",
-            onChanged: widget.enabled
-                ? (double value) => _selectFps(value.round())
-                : null,
-          ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: <int>[24, 30, 60].map((int fps) {
-              return ChoiceChip(
-                selected: widget.recipe.targetFps == fps,
-                onSelected: widget.enabled ? (_) => _selectFps(fps) : null,
-                label: Text("$fps fps"),
-              );
-            }).toList(),
-          ),
-          if (_experimentalFps) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <int>[90, 120].map((int fps) {
-                return ChoiceChip(
-                  selected: widget.recipe.targetFps == fps,
-                  onSelected: widget.enabled ? (_) => _selectFps(fps) : null,
-                  label: Text("$fps fps"),
-                );
-              }).toList(),
-            ),
-          ],
-          if (_fps144Unlocked) ...[
-            const SizedBox(height: 8),
-            ChoiceChip(
-              selected: widget.recipe.targetFps == 144,
-              onSelected: widget.enabled ? (_) => _selectFps(144) : null,
-              label: Text(S.t("144 fps (high risk)", "144 帧（高危）")),
-            ),
-          ],
-          if (widget.recipe.targetFps >= 90) ...[
-            const SizedBox(height: 8),
-            Text(
-              widget.recipe.targetFps >= 144
-                  ? S.t(
-                      "144 fps is experimental and high-risk. Fixed-rate conversion repeats or drops frames; it does not add real motion.",
-                      "144 帧是实验高危档。固定帧率只补重复帧或丢帧，不会增加真实运动。",
-                    )
-                  : S.t(
-                      "90/120 fps are experimental. Fixed-rate conversion repeats or drops frames; it does not make 30 fps source look smoother.",
-                      "90/120 帧是实验档。固定帧率只补重复帧或丢帧；30 帧源不会因此变流畅。",
-                    ),
-              style: Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(color: scheme.error),
-            ),
-          ],
         ],
-        if (hasAudio) ...[
+        ],
+        if (hasAudio && showAudio) ...[
           const SizedBox(height: 16),
           _label(scheme, S.t("Audio codec", "音频编码")),
           const SizedBox(height: 8),
@@ -2441,27 +2476,53 @@ class _RecipeCardState extends State<RecipeCard> {
           ),
           if (widget.recipe.audioCodec != AudioCodec.copy) ...[
             const SizedBox(height: 8),
-            SizedBox(
-              width: 156,
-              child: TextField(
-                controller: _audioBitrate,
-                enabled: widget.enabled,
-                keyboardType: TextInputType.number,
-                inputFormatters: <TextInputFormatter>[
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                decoration: const InputDecoration(suffixText: "kbps"),
-                onChanged: (String value) {
-                  final int? parsed = int.tryParse(value);
-                  if (parsed != null) _setAudioBitrate(parsed);
-                },
-              ),
+            Row(
+              children: <Widget>[
+                SizedBox(
+                  width: 156,
+                  child: TextField(
+                    controller: _audioBitrate,
+                    focusNode: _audioBitrateFocus,
+                    enabled: widget.enabled,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    decoration: const InputDecoration(
+                      suffixText: "kbps",
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) {
+                      _commitAudioBitrate();
+                      _audioBitrateFocus.unfocus();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  S.t(
+                    "8–512 kbps. Fixed stops below; the field accepts any whole value in range.",
+                    "8–512 kbps。下方是固定档，数字框可填范围内任意整数。",
+                  ),
+                  style: Theme.of(context).textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
-            Text(
-              S.t("8–512 kbps", "8–512 kbps"),
-              style: Theme.of(context).textTheme.labelSmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: <int>[64, 96, 128, 192, 256, 320, 512].map((int value) {
+                return ActionChip(
+                  onPressed: widget.enabled
+                      ? () => _setAudioBitrate(value)
+                      : null,
+                  label: Text("$value"),
+                );
+              }).toList(),
             ),
           ],
         ],

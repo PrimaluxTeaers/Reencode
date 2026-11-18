@@ -91,7 +91,7 @@ class CommandBuilder {
       ]);
       if (useGpuEncoder) {
         args.addAll(<String>[
-          if (windowsEncoder!.endsWith("_nvenc")) ...<String>["-preset", "p5"],
+          if (windowsEncoder.endsWith("_nvenc")) ...<String>["-preset", "p5"],
           if (windowsEncoder.endsWith("_amf")) ...<String>[
             "-quality",
             "balanced",

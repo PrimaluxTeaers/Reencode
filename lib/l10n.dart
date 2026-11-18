@@ -60,6 +60,8 @@ class AppPreferences {
   static ThemeMode themeMode = ThemeMode.system;
   static Color seed = const Color(0xFF0F5F66);
   static bool experimentalFrameRates = false;
+  static bool defaultForceCfr = false;
+  static int defaultTargetFps = 30;
   static bool hardwareEncoding = false;
   static bool backgroundMode = false;
   static int threadLimit = 0;
@@ -79,6 +81,8 @@ class AppPreferences {
       final int? storedSeed = prefs.getInt("accentSeed");
       if (storedSeed != null) seed = Color(storedSeed);
       experimentalFrameRates = prefs.getBool("experimentalFrameRates") ?? false;
+      defaultForceCfr = prefs.getBool("defaultForceCfr") ?? false;
+      defaultTargetFps = (prefs.getInt("defaultTargetFps") ?? 30).clamp(24, 144);
       hardwareEncoding = prefs.getBool("hardwareEncoding") ?? false;
       backgroundMode = prefs.getBool("backgroundMode") ?? false;
       threadLimit = prefs.getInt("threadLimit") ?? 0;
@@ -120,6 +124,27 @@ class AppPreferences {
     try {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool("experimentalFrameRates", value);
+    } catch (_) {}
+  }
+
+  static Future<void> setDefaultForceCfr(bool value) async {
+    if (defaultForceCfr == value) return;
+    defaultForceCfr = value;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool("defaultForceCfr", value);
+    } catch (_) {}
+  }
+
+  static Future<void> setDefaultTargetFps(int value) async {
+    final int next = value.clamp(24, 144);
+    if (defaultTargetFps == next) return;
+    defaultTargetFps = next;
+    revision.value++;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setInt("defaultTargetFps", next);
     } catch (_) {}
   }
 

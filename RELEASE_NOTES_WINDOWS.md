@@ -4,7 +4,7 @@
 
 安装包命名：`Reencode-WindowsX86-64`
 
-Windows 1.6 由 GitHub Actions 的 `windows-latest` runner 构建，产物是 `Reencode-WindowsX86-64-1.6.0.zip`，解压后运行目录里的 `reencode.exe`。真实 Windows 10 / 11 x64 的图形、文件对话框和硬件编码仍需在本地机器上复核；Linux 环境不能直接产出 exe。
+Windows 1.6 由 GitHub Actions 的 `windows-latest` runner 构建，产物是 `Reencode-WindowsX86-64-1.6.0.zip`，解压后运行目录里的 `Reencode.exe`。Windows 和 Android 共用本仓库同一套 Flutter 源码；`windows/` runner 在 CI 里由这套源码生成，FFmpeg 二进制在构建时下载，仓库里没有闭源桌面模块。真实 Windows 10 / 11 x64 的图形、文件对话框和硬件编码仍需在本地机器上复核；Linux 环境不能直接产出 exe。
 
 已确认的 Windows 口径：
 
@@ -16,6 +16,7 @@ Windows 1.6 由 GitHub Actions 的 `windows-latest` runner 构建，产物是 `R
 - 快捷键面板是只读参考页，列出常见转码软件的播放、队列、开始、取消键位；当前版本不支持改键。
 - GPU 编码是实验路径；硬件编码失败时删除半成品并回退 CPU，CPU 路径始终可用。
 - AV1 只有 `libaom-av1` 软件编码，没有 AV1 硬件编码。
+- 视频码率 1–100000 kbps，滑块只吸固定档，数字框可精确输入并卡在同一范围；分辨率自定义单边 16–7680、奇数自动减 1；帧率正常范围 24–60 固定档，90 / 120 为独立实验档，144 需连点 120 四次。
 - 插帧入口已删除，144fps 只补重复帧或丢帧；Windows 端也不做插帧。
 - 视频多轨：只处理第一条视频流和全部音频流；字幕、附件和多视频轨不复制。
 
@@ -23,7 +24,7 @@ Windows 1.6 由 GitHub Actions 的 `windows-latest` runner 构建，产物是 `R
 
 Installer name: `Reencode-WindowsX86-64`
 
-The Windows 1.6 build is produced on GitHub Actions' `windows-latest` runner as `Reencode-WindowsX86-64-1.6.0.zip`; unzip it and run `reencode.exe` from the release folder. Real Windows 10 / 11 x64 graphics, file dialogs and hardware encoding still need a local pass; a Linux machine cannot produce the exe directly.
+The Windows 1.6 build is produced on GitHub Actions' `windows-latest` runner as `Reencode-WindowsX86-64-1.6.0.zip`; unzip it and run `Reencode.exe`. Windows and Android share the same Flutter source in this repository; the `windows/` runner is generated from that source in CI and FFmpeg binaries are fetched at build time, so there is no closed-source desktop module. Real Windows 10 / 11 x64 graphics, file dialogs and hardware encoding still need a local pass; a Linux machine cannot produce the exe directly.
 
 Confirmed Windows behaviour:
 
@@ -35,5 +36,6 @@ Confirmed Windows behaviour:
 - The shortcut panel is a read-only reference page listing common play, queue, start and cancel keys; rebinding is not supported in this build.
 - GPU encoding is experimental; a failed hardware job deletes the partial output and falls back to the CPU. The CPU path is always available.
 - AV1 is software-only through `libaom-av1`; there is no AV1 hardware encoder.
+- Video bitrate is 1–100000 kbps; the slider only snaps to fixed stops and the number field clamps to the same range. Custom resolution is 16–7680 per side and odd values become even. The normal frame-rate range is fixed stops 24–60; 90 / 120 are independent experimental chips, and 144 needs four taps on 120.
 - The frame-interpolation entry is gone; 144 fps only duplicates or drops frames, and the Windows build does not interpolate either.
 - Multiple video tracks: only the first video stream and all audio streams are processed; subtitles, attachments and extra video tracks are not copied.

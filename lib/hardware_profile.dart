@@ -24,6 +24,10 @@ class HardwareProfile {
     this.physicalCores = 0,
     this.logicalCores = 0,
     this.gpuVendor = '',
+    this.gpuRenderer = '',
+    this.gpuVersion = '',
+    this.gpuSource = '',
+    this.glEsVersion = '',
     this.nvencAvailable = false,
     this.amfAvailable = false,
     this.av1Decode = false,
@@ -46,6 +50,10 @@ class HardwareProfile {
   final int physicalCores;
   final int logicalCores;
   final String gpuVendor;
+  final String gpuRenderer;
+  final String gpuVersion;
+  final String gpuSource;
+  final String glEsVersion;
   final bool nvencAvailable;
   final bool amfAvailable;
   final bool av1Decode;
@@ -69,7 +77,12 @@ class HardwareProfile {
   }
 
   bool get socKnown => soc.trim().isNotEmpty && soc.trim() != 'unknown';
-  bool get gpuKnown => gpu.trim().isNotEmpty && gpu.trim() != 'Unknown GPU';
+  bool get gpuKnown =>
+      (gpu.trim().isNotEmpty && gpu.trim() != 'Unknown GPU') ||
+      gpuRenderer.trim().isNotEmpty;
+
+  bool get hardwarePathAvailable =>
+      gpuKnown || socKnown || hasHardwareEncoder;
 
   String get socLabel => socKnown ? soc : '可用，但型号未知';
   String get gpuLabel => gpuKnown ? gpu : 'GPU 未知';
@@ -112,6 +125,11 @@ class HardwareProfile {
           soc: _str(raw['socModel']),
           socVendor: _str(raw['socManufacturer']),
           gpu: _str(raw['gpu']),
+          gpuRenderer: _str(raw['gpuRenderer']),
+          gpuVendor: _str(raw['gpuVendor']),
+          gpuVersion: _str(raw['gpuVersion']),
+          gpuSource: _str(raw['gpuSource']),
+          glEsVersion: _str(raw['glEsVersion']),
           model: _str(raw['model']),
           manufacturer: _str(raw['manufacturer']),
           cores: _int(raw['cores']),

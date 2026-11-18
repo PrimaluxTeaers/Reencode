@@ -102,9 +102,13 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
   ToolFile? _audioSource;
   AudioTarget _audioTarget = AudioTarget.aac;
   int _audioBitrate = 192;
-  SplitVideoTarget _splitVideoTarget = SplitVideoTarget.copy;
+  VideoCodec? _splitVideoCodec;
+  TargetContainer? _splitContainer;
   bool _splitAudioCopy = true;
   AudioTarget _splitAudioTarget = AudioTarget.aac;
+  VideoCodec? _mergeVideoCodec;
+  TargetContainer? _mergeContainer;
+  int _mergeVideoBitrate = 2000;
   bool _mergeAudioCopy = false;
   AudioTarget _mergeAudioTarget = AudioTarget.aac;
   double _mergeVolume = 1.0;
@@ -151,9 +155,30 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
     final Directory dir = await getTemporaryDirectory();
     final String stamp = DateTime.now().millisecondsSinceEpoch.toString();
     final String base = p.basenameWithoutExtension(source.path);
-    final String videoContainer = _splitVideoTarget.container.isEmpty
-        ? ((source.media.video?.codec ?? "") == "vp9" ? "webm" : "mp4")
-        : _splitVideoTarget.container;
+    final String sourceCodec = source.media.video?.codec ?? "";
+    final TargetContainer container =
+        _splitContainer ?? _sourceContainerFor(sourceCodec);
+    if (_splitVideoCodec == null &&
+        !containerAcceptsVideo(container, sourceCodec)) {
+      setState(
+        () => _error = S.t(
+          "This container cannot carry the source video codec without re-encoding. Choose a compatible container or pick a video codec.",
+          "这个容器装不下源视频编码，除非重新编码。换兼容容器，或选一个视频编码。",
+        ),
+      );
+      return;
+    }
+    if (_splitVideoCodec != null &&
+        !containerAcceptsVideo(container, _splitVideoCodec!.ffmpegName)) {
+      setState(
+        () => _error = S.t(
+          "The selected video codec is not valid for this container.",
+          "当前容器不支持所选视频编码。",
+        ),
+      );
+      return;
+    }
+    final String videoContainer = container.extension;
     final String videoPath = p.join(
       dir.path,
       "$base-video-$stamp.$videoContainer",
@@ -163,7 +188,12 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
       "$base-audio-$stamp.${_splitAudioCopy ? audioExtension(source.media.audio?.codec ?? "") : _splitAudioTarget.fileExtension}",
     );
     await _runCommands(<List<String>>[
-      splitVideoArgs(source.path, videoPath, target: _splitVideoTarget),
+      splitVideoArgs(
+        source.path,
+        videoPath,
+        copyVideo: _splitVideoCodec == null,
+        codec: _splitVideoCodec,
+      ),
       splitAudioArgs(
         source.path,
         audioPath,
@@ -180,22 +210,60 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
     final ToolFile? video = _mergeVideo;
     final ToolFile? audio = _mergeAudio;
     if (video == null || audio == null || _busy) return;
-    final String container = mergeContainer(
-      video.media,
-      audio.media,
-      !_mergeAudioCopy,
+    final TargetContainer autoContainer = TargetContainer.values.firstWhere(
+      (TargetContainer value) =>
+          value.extension ==
+          mergeContainer(video.media, audio.media, !_mergeAudioCopy),
+      orElse: () => TargetContainer.mkv,
     );
+    final TargetContainer container = _mergeContainer ?? autoContainer;
+    final String sourceVideoCodec = video.media.video?.codec ?? "";
+    if (_mergeVideoCodec == null &&
+        !containerAcceptsVideo(container, sourceVideoCodec)) {
+      setState(
+        () => _error = S.t(
+          "This container cannot carry the source video codec without re-encoding. Choose a compatible container or pick a video codec.",
+          "这个容器装不下源视频编码，除非重新编码。换兼容容器，或选一个视频编码。",
+        ),
+      );
+      return;
+    }
+    if (_mergeVideoCodec != null &&
+        !containerAcceptsVideo(container, _mergeVideoCodec!.ffmpegName)) {
+      setState(
+        () => _error = S.t(
+          "The selected video codec is not valid for this container.",
+          "当前容器不支持所选视频编码。",
+        ),
+      );
+      return;
+    }
+    final String audioCodec = _mergeAudioCopy
+        ? (audio.media.audio?.codec ?? "")
+        : _mergeAudioTarget.ffmpegCodec;
+    if (!containerAcceptsAudio(container, audioCodec)) {
+      setState(
+        () => _error = S.t(
+          "This container cannot carry the selected audio codec.",
+          "这个容器装不下所选音频编码。",
+        ),
+      );
+      return;
+    }
     final Directory dir = await getTemporaryDirectory();
     final String stamp = DateTime.now().millisecondsSinceEpoch.toString();
     final String outputPath = p.join(
       dir.path,
-      "${p.basenameWithoutExtension(video.path)}-merged-$stamp.$container",
+      "${p.basenameWithoutExtension(video.path)}-merged-$stamp.${container.extension}",
     );
     await _runCommands(<List<String>>[
       mergeArgs(
         video.path,
         audio.path,
         outputPath,
+        copyVideo: _mergeVideoCodec == null,
+        videoCodec: _mergeVideoCodec,
+        videoBitrateKbps: _mergeVideoBitrate,
         copyAudio: _mergeAudioCopy,
         target: _mergeAudioTarget,
         audioBitrate: _audioBitrate,
@@ -381,8 +449,8 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
       icon: Icons.call_split_rounded,
       title: S.t("Split a video", "分离视频"),
       hint: S.t(
-        "One video in, one video stream and one audio stream out. Copy both by default, or set a new format and bitrate before splitting.",
-        "一个视频进去，出来一条视频流和一条音频流。默认两边原样复制；分离前也可以改格式和码率。",
+        "One video in, one video stream and one audio stream out. Copy the video stream or re-encode it; the output container can be changed independently.",
+        "一个视频进去，出来一条视频流和一条音频流。视频可原样复制或重编码；输出容器可单独改。",
       ),
       children: [
         _fileRow(
@@ -395,17 +463,51 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
           },
         ),
         const SizedBox(height: 10),
-        DropdownButtonFormField<SplitVideoTarget>(
-          initialValue: _splitVideoTarget,
-          decoration: InputDecoration(labelText: S.t("Video output", "视频输出")),
-          items: SplitVideoTarget.values.map((SplitVideoTarget value) {
-            return DropdownMenuItem<SplitVideoTarget>(
-              value: value,
-              child: Text(value.label),
-            );
-          }).toList(),
-          onChanged: (SplitVideoTarget? value) {
-            if (value != null) setState(() => _splitVideoTarget = value);
+        DropdownButtonFormField<VideoCodec?>(
+          key: ValueKey<String>(
+            "split-codec-${_splitVideoCodec?.name ?? 'copy'}",
+          ),
+          initialValue: _splitVideoCodec,
+          decoration: InputDecoration(labelText: S.t("Video stream", "视频流")),
+          items: <DropdownMenuItem<VideoCodec?>>[
+            DropdownMenuItem<VideoCodec?>(
+              value: null,
+              child: Text(S.t("Copy video stream", "视频流原样复制")),
+            ),
+            ...VideoCodec.values.map((VideoCodec value) {
+              return DropdownMenuItem<VideoCodec?>(
+                value: value,
+                child: Text(value.shortLabel),
+              );
+            }),
+          ],
+          onChanged: (VideoCodec? value) {
+            setState(() => _splitVideoCodec = value);
+          },
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<TargetContainer?>(
+          key: ValueKey<String>(
+            "split-container-${_splitContainer?.name ?? 'auto'}",
+          ),
+          initialValue: _splitContainer,
+          decoration: InputDecoration(
+            labelText: S.t("Video container", "视频容器"),
+          ),
+          items: <DropdownMenuItem<TargetContainer?>>[
+            DropdownMenuItem<TargetContainer?>(
+              value: null,
+              child: Text(S.t("Follow source", "跟随源容器")),
+            ),
+            ...TargetContainer.values.map((TargetContainer value) {
+              return DropdownMenuItem<TargetContainer?>(
+                value: value,
+                child: Text(value.label),
+              );
+            }),
+          ],
+          onChanged: (TargetContainer? value) {
+            setState(() => _splitContainer = value);
           },
         ),
         SwitchListTile(
@@ -459,8 +561,8 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
       icon: Icons.merge_rounded,
       title: S.t("Merge video and audio", "合并视频和音频"),
       hint: S.t(
-        "Video stream stays untouched. Audio can be copied or re-encoded.",
-        "视频流不动；音频可以原样复制，也可以重新编码。",
+        "Copy the video stream or re-encode it to a chosen codec and bitrate. The output container can also be changed; audio is copied or re-encoded.",
+        "视频流可原样复制，也可按所选编码和码率重编码；输出容器可改。音频可复制或重编码。",
       ),
       children: [
         _fileRow(
@@ -480,6 +582,58 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
           onPick: () async {
             final ToolFile? file = await _pick(video: false);
             if (file != null) setState(() => _mergeAudio = file);
+          },
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<VideoCodec?>(
+          key: ValueKey<String>(
+            "merge-codec-${_mergeVideoCodec?.name ?? 'copy'}",
+          ),
+          initialValue: _mergeVideoCodec,
+          decoration: InputDecoration(labelText: S.t("Video stream", "视频流")),
+          items: <DropdownMenuItem<VideoCodec?>>[
+            DropdownMenuItem<VideoCodec?>(
+              value: null,
+              child: Text(S.t("Copy video stream", "视频流原样复制")),
+            ),
+            ...VideoCodec.values.map((VideoCodec value) {
+              return DropdownMenuItem<VideoCodec?>(
+                value: value,
+                child: Text(value.shortLabel),
+              );
+            }),
+          ],
+          onChanged: (VideoCodec? value) {
+            setState(() => _mergeVideoCodec = value);
+          },
+        ),
+        if (_mergeVideoCodec != null) ...[
+          const SizedBox(height: 8),
+          _videoBitrateRow(scheme),
+        ],
+        const SizedBox(height: 8),
+        DropdownButtonFormField<TargetContainer?>(
+          key: ValueKey<String>(
+            "merge-container-${_mergeContainer?.name ?? 'auto'}",
+          ),
+          initialValue: _mergeContainer,
+          decoration: InputDecoration(
+            labelText: S.t("Output container", "输出容器"),
+          ),
+          items: <DropdownMenuItem<TargetContainer?>>[
+            DropdownMenuItem<TargetContainer?>(
+              value: null,
+              child: Text(S.t("Auto", "自动")),
+            ),
+            ...TargetContainer.values.map((TargetContainer value) {
+              return DropdownMenuItem<TargetContainer?>(
+                value: value,
+                child: Text(value.label),
+              );
+            }),
+          ],
+          onChanged: (TargetContainer? value) {
+            setState(() => _mergeContainer = value);
           },
         ),
         SwitchListTile(
@@ -613,6 +767,50 @@ class _MediaToolsPageState extends State<MediaToolsPage> {
           onChanged: (double value) {
             setState(() => _audioBitrate = (value / 16).round() * 16);
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _videoBitrateRow(ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 6),
+        Text(
+          S.t(
+            "Video bitrate · $_mergeVideoBitrate kbps",
+            "视频码率 · $_mergeVideoBitrate kbps",
+          ),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        Slider(
+          value: _mergeVideoBitrate.toDouble().clamp(1, 100000),
+          min: 1,
+          max: 100000,
+          divisions: 999,
+          label: "$_mergeVideoBitrate kbps",
+          onChanged: (double value) {
+            setState(() => _mergeVideoBitrate = value.round());
+          },
+        ),
+        Text(
+          S.t(
+            "1–100000 kbps. Slider step is about 100 kbps; use the presets for exact common values.",
+            "1–100000 kbps。滑块每格约 100 kbps；常用值用下面的预设。",
+          ),
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <int>[500, 1000, 2000, 4000, 8000].map((int value) {
+            return ActionChip(
+              onPressed: () => setState(() => _mergeVideoBitrate = value),
+              label: Text("$value"),
+            );
+          }).toList(),
         ),
       ],
     );
@@ -818,8 +1016,10 @@ String audioExtension(String codec) {
 List<String> splitVideoArgs(
   String input,
   String output, {
-  SplitVideoTarget target = SplitVideoTarget.copy,
+  bool copyVideo = true,
+  VideoCodec? codec,
 }) {
+  final String codecName = codec?.ffmpegName ?? "copy";
   return <String>[
     "-y",
     "-i",
@@ -827,8 +1027,8 @@ List<String> splitVideoArgs(
     "-map",
     "0:v:0",
     "-c:v",
-    target.codec,
-    if (target != SplitVideoTarget.copy) ...<String>[
+    codecName,
+    if (!copyVideo) ...<String>[
       "-preset",
       "medium",
       "-crf",
@@ -867,11 +1067,15 @@ List<String> mergeArgs(
   String video,
   String audio,
   String output, {
+  bool copyVideo = true,
+  VideoCodec? videoCodec,
+  int videoBitrateKbps = 2000,
   bool copyAudio = true,
   AudioTarget target = AudioTarget.aac,
   int audioBitrate = 192,
   double volume = 1.0,
 }) {
+  final String videoCodecName = videoCodec?.ffmpegName ?? "copy";
   return <String>[
     "-y",
     "-i",
@@ -883,7 +1087,13 @@ List<String> mergeArgs(
     "-map",
     "1:a:0",
     "-c:v",
-    "copy",
+    videoCodecName,
+    if (!copyVideo) ...<String>[
+      "-preset",
+      "medium",
+      "-b:v",
+      "${videoBitrateKbps}k",
+    ],
     "-c:a",
     copyAudio ? "copy" : target.ffmpegCodec,
     if (!copyAudio && target != AudioTarget.flac && target != AudioTarget.wav) ...<String>[
@@ -920,6 +1130,55 @@ List<String> audioOnlyArgs(
     ],
     output,
   ];
+}
+
+TargetContainer _sourceContainerFor(String codec) {
+  final String normalized = codec.toLowerCase();
+  if (normalized == "vp9" || normalized == "av1") return TargetContainer.webm;
+  if (normalized == "h264" ||
+      normalized == "hevc" ||
+      normalized == "mpeg4") {
+    return TargetContainer.mp4;
+  }
+  return TargetContainer.mkv;
+}
+
+bool containerAcceptsVideo(TargetContainer container, String codec) {
+  final String normalized = codec.toLowerCase();
+  switch (container) {
+    case TargetContainer.mp4:
+      return normalized == "h264" ||
+          normalized == "hevc" ||
+          normalized == "av1" ||
+          normalized == "mpeg4";
+    case TargetContainer.mov:
+      return normalized == "h264" ||
+          normalized == "hevc" ||
+          normalized == "mpeg4";
+    case TargetContainer.webm:
+      return normalized == "vp9" || normalized == "av1";
+    case TargetContainer.mkv:
+      return true;
+  }
+}
+
+bool containerAcceptsAudio(TargetContainer container, String codec) {
+  final String normalized = codec.toLowerCase();
+  switch (container) {
+    case TargetContainer.mp4:
+      return normalized == "aac" ||
+          normalized == "mp3" ||
+          normalized == "alac";
+    case TargetContainer.mov:
+      return normalized == "aac" ||
+          normalized == "mp3" ||
+          normalized == "alac" ||
+          normalized == "pcm_s16le";
+    case TargetContainer.webm:
+      return normalized == "opus" || normalized == "vorbis";
+    case TargetContainer.mkv:
+      return true;
+  }
 }
 
 String mergeContainer(

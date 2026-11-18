@@ -204,7 +204,15 @@ public class MainActivity extends FlutterActivity {
 		}
 		map.put("socModel", socModel);
 		map.put("socManufacturer", socManufacturer);
-		map.put("gpu", inferGpu(socModel + " " + Build.HARDWARE + " " + Build.BOARD));
+		Map<String, Object> gpuInfo = GpuProbe.read(this);
+		map.put("gpuRenderer", gpuInfo.get("renderer"));
+		map.put("gpuVendor", gpuInfo.get("vendor"));
+		map.put("gpuVersion", gpuInfo.get("version"));
+		map.put("eglVendor", gpuInfo.get("eglVendor"));
+		map.put("eglVersion", gpuInfo.get("eglVersion"));
+		map.put("glEsVersion", gpuInfo.get("glEsVersion"));
+		map.put("gpuSource", gpuInfo.get("source"));
+		map.put("gpu", inferGpu(socModel + " " + Build.HARDWARE + " " + Build.BOARD + " " + gpuInfo.get("renderer")));
 		map.put("cores", Runtime.getRuntime().availableProcessors());
 		ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
@@ -244,14 +252,33 @@ public class MainActivity extends FlutterActivity {
 
 	private String inferGpu(String raw) {
 		String lower = raw.toLowerCase();
-		if (lower.contains("9600")) return "Mali-G2 Ultra NX (Dimensity 9600)";
-		if (lower.contains("9400")) return "Mali-G925 (Dimensity 9400)";
-		if (lower.contains("9300")) return "Mali-G720 (Dimensity 9300)";
-		if (lower.contains("8500") || lower.contains("8400")) return "Mali-G720 (Dimensity 8000 series)";
+		// Read the GL renderer first. It is authoritative even when the CPU
+		// model is "0" or hidden by the vendor ROM.
+		if (lower.contains("g2 ultra") || lower.contains("g2-ultra")) {
+			return "Mali-G2 Ultra (Dimensity 9600)";
+		}
+		if (lower.contains("g1 ultra") || lower.contains("g1-ultra")) {
+			return "Mali-G1 Ultra (Dimensity 9500)";
+		}
+		if (lower.contains("immortalis-g925") || lower.contains("g925")) {
+			return "Immortalis-G925 (Dimensity 9400 / 9400+)";
+		}
+		if (lower.contains("immortalis-g720") || lower.contains("g720")) {
+			return "Immortalis-G720 (Dimensity 9300 / 8400 series)";
+		}
+		if (lower.contains("g715")) return "Mali-G715 (Dimensity 9200 / 8300)";
+		if (lower.contains("g710")) return "Mali-G710 (Dimensity 9000 / 8100)";
+		if (lower.contains("g610")) return "Mali-G610 (Dimensity 8000 / 8200)";
+		if (lower.contains("xclipse")) return "Xclipse (Exynos)";
+		if (lower.contains("adreno")) return "Adreno (Snapdragon)";
+		if (lower.contains("mali")) return "Mali";
+		if (lower.contains("9600")) return "Mali-G2 Ultra (Dimensity 9600)";
+		if (lower.contains("9500")) return "Mali-G1 Ultra (Dimensity 9500)";
+		if (lower.contains("9400")) return "Immortalis-G925 (Dimensity 9400 / 9400+)";
+		if (lower.contains("9300")) return "Immortalis-G720 (Dimensity 9300)";
+		if (lower.contains("8500") || lower.contains("8400")) return "Immortalis-G720 (Dimensity 8400 / 8500)";
 		if (lower.contains("8 elite") || lower.contains("sm8750") || lower.contains("sm8850")) return "Adreno 8xx (Snapdragon 8 Elite)";
 		if (lower.contains("sm7750") || lower.contains("7 gen 4")) return "Adreno 722 (Snapdragon 7 Gen 4)";
-		if (lower.contains("mali")) return "Mali";
-		if (lower.contains("adreno")) return "Adreno";
 		return "Unknown GPU";
 	}
 

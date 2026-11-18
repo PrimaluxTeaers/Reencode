@@ -8,13 +8,14 @@ import "package:path/path.dart" as p;
 import "hardware_profile.dart";
 import "l10n.dart";
 
-enum WorkMode { remux, transcode, compress }
+enum WorkMode { remux, transcode, compress, custom }
 
 extension WorkModeInfo on WorkMode {
   String get label => switch (this) {
     WorkMode.remux => S.t("Remux", "只换容器"),
-    WorkMode.transcode => S.t("Re-encode", "换编码"),
-    WorkMode.compress => S.t("Compress", "压码率"),
+    WorkMode.transcode => S.t("Container + codec", "换容器 / 换编码"),
+    WorkMode.compress => S.t("Bitrate only", "压码率"),
+    WorkMode.custom => S.t("Custom", "自定义"),
   };
 
   String get hint => switch (this) {
@@ -23,12 +24,16 @@ extension WorkModeInfo on WorkMode {
       "复制音视频流，只换封装。画质不变。",
     ),
     WorkMode.transcode => S.t(
-      "Change codec and container. Re-encodes video.",
-      "换视频编码和容器，视频会重新编码。",
+      "Change the container and codecs. Bitrate follows the source; use Custom to set every value.",
+      "换容器和编码。码率沿用源；要逐项改就切“自定义”。",
     ),
     WorkMode.compress => S.t(
-      "Lower a chosen bitrate, optionally resize.",
-      "按目标码率重编码，可顺带降分辨率。",
+      "Only the video bitrate is editable. Container and codecs are fixed for compatibility.",
+      "只改视频码率。容器和编码固定为兼容档，其余不动。",
+    ),
+    WorkMode.custom => S.t(
+      "Every video and audio control is available.",
+      "视频、音频的所有参数都能调。",
     ),
   };
 
@@ -36,6 +41,7 @@ extension WorkModeInfo on WorkMode {
     WorkMode.remux => Icons.swap_horiz_rounded,
     WorkMode.transcode => Icons.tune_rounded,
     WorkMode.compress => Icons.compress_rounded,
+    WorkMode.custom => Icons.dashboard_customize_outlined,
   };
 }
 
@@ -624,7 +630,10 @@ class ConversionRecipe {
       audioBitrateKbps: sourceAudioKbps > 0 ? sourceAudioKbps : 128,
       targetWidth: 0,
       targetHeight: 0,
-      targetFps: 0,
+      targetFps: AppPreferences.defaultForceCfr ? AppPreferences.defaultTargetFps : 0,
+      frameRateMode: AppPreferences.defaultForceCfr
+          ? FrameRateMode.cfr
+          : FrameRateMode.passthrough,
       hardwareAcceleration: AppPreferences.hardwareEncoding
           ? HardwareAcceleration.auto
           : HardwareAcceleration.software,
@@ -650,6 +659,7 @@ class ConversionRecipe {
         mode: mode,
         container: container,
         audioCodec: AudioCodec.copy,
+        targetWidth: 0,
         targetHeight: 0,
         targetFps: 0,
         frameRateMode: FrameRateMode.passthrough,
@@ -667,12 +677,25 @@ class ConversionRecipe {
         audioCodec: AudioCodec.aac,
         videoBitrateKbps: target,
         audioBitrateKbps: 128,
+        targetWidth: 0,
+        targetHeight: 0,
+        targetFps: 0,
+        frameRateMode: FrameRateMode.passthrough,
       );
     }
+    final int sourceVideoKbps = media.video?.bitrateKbps ?? 0;
     return copyWith(
       mode: mode,
       container: container,
       audioCodec: AudioCodec.aac,
+      videoBitrateKbps: mode == WorkMode.transcode && sourceVideoKbps > 0
+          ? sourceVideoKbps
+          : videoBitrateKbps,
+      targetWidth: 0,
+      targetHeight: 0,
+      targetFps: 0,
+      frameRateMode: FrameRateMode.passthrough,
+      pixelDepth: PixelDepth.auto,
     );
   }
 
@@ -1262,6 +1285,7 @@ String outputNameFor(VideoJob job, ConversionRecipe recipe) {
     WorkMode.remux => "remux",
     WorkMode.transcode => recipe.videoCodec.name,
     WorkMode.compress => "${recipe.videoBitrateKbps}k",
+    WorkMode.custom => "custom",
   };
   return "$base-$suffix.${recipe.container.extension}";
 }

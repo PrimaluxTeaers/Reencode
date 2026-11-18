@@ -12,7 +12,11 @@ const List<(Color, String, String)> kAccentPalette = <(Color, String, String)>[
 
 /// Material 3 theme with continuous corners and a quiet, tool-like surface.
 /// The seed colour comes from the user's accent choice.
-ThemeData buildAppTheme(Brightness brightness, Color seed) {
+ThemeData buildAppTheme(
+  Brightness brightness,
+  Color seed, {
+  String? fontFamily,
+}) {
   final ColorScheme scheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
@@ -51,22 +55,25 @@ ThemeData buildAppTheme(Brightness brightness, Color seed) {
     ),
   );
 
+  final TextTheme themed = fontFamily == null
+      ? text
+      : text.apply(fontFamily: fontFamily);
   return base.copyWith(
-    textTheme: text,
+    textTheme: themed,
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: text.titleLarge?.copyWith(color: scheme.onSurface),
+      titleTextStyle: themed.titleLarge?.copyWith(color: scheme.onSurface),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 56),
         padding: const EdgeInsets.symmetric(horizontal: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        textStyle: text.labelLarge?.copyWith(fontSize: 16),
+        textStyle: themed.labelLarge?.copyWith(fontSize: 16),
       ),
     ),
     textButtonTheme: TextButtonThemeData(

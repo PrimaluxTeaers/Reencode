@@ -1,12 +1,14 @@
 import "dart:io";
 
 import "package:material_ui/material_ui.dart";
-import "package:flutter/services.dart";
 
 import "dialogs.dart";
+import "frame_rate_field.dart";
 import "hardware_profile.dart";
+import "font_manager.dart";
+import "font_manager_page.dart";
+import "haptics.dart";
 import "l10n.dart";
-import "models.dart";
 import "licenses_page.dart";
 import "output_store.dart";
 import "page_route.dart";
@@ -66,7 +68,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (target != null) _target = target;
     });
     if (target != null) {
-      HapticFeedback.selectionClick();
+      Haptics.selectionClick();
       _toast(S.t("Results will go here from now on.", "之后的转换结果会直接存到这里。"));
     }
   }
@@ -140,7 +142,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 16),
                 _appearancePanel(scheme),
                 const SizedBox(height: 16),
-                _experimentalPanel(scheme),
+                _fontPanel(scheme),
+                const SizedBox(height: 16),
+                _frameRatePanel(scheme),
                 const SizedBox(height: 16),
                 _aboutPanel(scheme),
               ]),
@@ -185,7 +189,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
               selected: <String>{S.mode},
               onSelectionChanged: (Set<String> value) {
-                HapticFeedback.selectionClick();
+                Haptics.selectionClick();
                 S.setMode(value.first);
               },
             ),
@@ -408,7 +412,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               value: AppPreferences.backgroundMode,
               onChanged: (bool value) {
-                HapticFeedback.selectionClick();
+                Haptics.selectionClick();
                 AppPreferences.setBackgroundMode(value);
               },
             ),
@@ -430,7 +434,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             value: AppPreferences.hardwareEncoding,
             onChanged: (bool value) {
-              HapticFeedback.selectionClick();
+              Haptics.selectionClick();
               AppPreferences.setHardwareEncoding(value);
             },
           ),
@@ -649,12 +653,28 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
               selected: <ThemeMode>{AppPreferences.themeMode},
               onSelectionChanged: (Set<ThemeMode> value) {
-                HapticFeedback.selectionClick();
+                Haptics.selectionClick();
                 AppPreferences.setThemeMode(value.first);
               },
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(S.t("Haptic feedback", "震动反馈")),
+            subtitle: Text(
+              S.t(
+                "On by default. Turn it off to stop every tap and impact vibration.",
+                "默认开启。关闭后所有点按和操作震动都会停。",
+              ),
+            ),
+            value: Haptics.enabled,
+            onChanged: (bool value) {
+              setState(() => Haptics.enabled = value);
+              Haptics.setEnabled(value);
+            },
+          ),
+          const SizedBox(height: 12),
           Text(
             S.t("Accent colour", "主题色"),
             style: Theme.of(context).textTheme.titleSmall,
@@ -676,7 +696,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
-                      HapticFeedback.selectionClick();
+                      Haptics.selectionClick();
                       AppPreferences.setSeed(item.$1);
                     },
                     child: Column(
@@ -719,7 +739,49 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _experimentalPanel(ColorScheme scheme) {
+  Widget _fontPanel(ColorScheme scheme) {
+    final String current = FontManager.selectedPath?.split(Platform.pathSeparator).last ??
+        S.t("System default", "系统默认");
+    return _panel(
+      scheme,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _panelTitle(scheme, Icons.font_download_outlined, S.t("Fonts", "字体")),
+          const SizedBox(height: 6),
+          Text(
+            S.t("Current: $current", "当前：$current"),
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            S.t(
+              "Import TTF/OTF/TTC files, or put them in the app's font folder and tick one in the manager. Untick to return to the system font. Android does not allow a normal app to replace system fonts; this affects this app only.",
+              "可导入 TTF/OTF/TTC，或把文件放进应用字体文件夹，在管理页勾选。取消勾选回到系统字体。安卓不允许普通应用替换系统字体，这里只改本应用。",
+            ),
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.tonalIcon(
+            onPressed: () {
+              Haptics.selectionClick();
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FontManagerPage(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.manage_search_rounded),
+            label: Text(S.t("Manage fonts", "管理字体")),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _frameRatePanel(ColorScheme scheme) {
+    final bool cfr = AppPreferences.defaultForceCfr;
     return _panel(
       scheme,
       child: Column(
@@ -727,34 +789,33 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _panelTitle(
             scheme,
-            Icons.science_outlined,
-            S.t("Experimental tools", "实验功能"),
+            Icons.speed_rounded,
+            S.t("Default frame rate", "默认帧率"),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             S.t(
-              "Enables 90 and 120 fps. 144 fps is hidden behind four taps on 120 and a separate warning. Fixed-rate conversion only repeats or drops frames; it does not make motion smoother.",
-              "开启后出现 90 和 120 帧。144 帧藏在“连续点 120 帧四次”之后，并单独警告。固定帧率只补重复帧或丢帧，不会让画面变流畅。",
+              "New recipes start with this. Passthrough keeps the source timing; a fixed rate repeats or drops frames and does not interpolate.",
+              "新建任务按这里的默认值起步。跟随源保留源时间基；固定帧率只补重复帧或丢帧，不插帧。",
             ),
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text(S.t("Show 90 / 120 fps", "显示 90 / 120 帧")),
-            subtitle: Text(
-              S.t(
-                "There is a deeper, riskier option above 120 fps. You only see it after unlocking 120 and reading the warning.",
-                "120 帧以上还有一个更底层、风险更高的选项；解锁 120 并看完警告后才会出现。",
-              ),
-            ),
-            value: AppPreferences.experimentalFrameRates,
+            title: Text(S.t("Use a fixed frame rate", "默认固定帧率")),
+            value: cfr,
             onChanged: (bool value) {
-              HapticFeedback.selectionClick();
-              AppPreferences.setExperimentalFrameRates(value);
+              Haptics.selectionClick();
+              AppPreferences.setDefaultForceCfr(value);
             },
           ),
+          if (cfr) ...[
+            FrameRateField(
+              value: AppPreferences.defaultTargetFps,
+              onChanged: AppPreferences.setDefaultTargetFps,
+            ),
+          ],
         ],
       ),
     );
